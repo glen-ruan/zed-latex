@@ -2,3 +2,6 @@
 **/.DS_STORE
 target
 grammars
+
+.dev/
+dist/
