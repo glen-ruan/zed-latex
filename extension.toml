@@ -1,6 +1,6 @@
 id = "latex"
-name = "LaTeX"
-version = "0.3.1-dev"
+name = "LaTeX — XeLaTeX & expl3"
+version = "0.3.1"
 schema_version = 1
 authors = [
     "Ruben Zukic <ruben@zukic.net>",
@@ -8,8 +8,8 @@ authors = [
     "Luke Naylor <luke.naylr@gmail.com>",
     "Jan Solanti <jhs@psonet.com>",
 ]
-description = "LaTeX language server and syntax highlighting for Zed. See wiki on GitHub for help."
-repository = "https://github.com/rzukic/zed-latex"
+description = "LaTeX support with XeLaTeX tasks and expl3 command highlighting."
+repository = "https://github.com/glen-ruan/zed-latex"
 
 [language_servers.texlab]
 name = "TexLab (Latex Language Server)"
@@ -20,5 +20,6 @@ repository = "https://github.com/latex-lsp/tree-sitter-bibtex"
 commit = "ccfd77db0ed799b6c22c214fe9d2937f47bc8b34"
 
 [grammars.latex]
-repository = "https://github.com/497e0bdf29873/tree-sitter-latex"
-commit = "858af2c24547c8ab9386281ece6ead6936dbc8d1"
+repository = "https://github.com/glen-ruan/zed-latex"
+commit = "33517da106283e03bc89d179881923643e0e6939"
+path = "parser/latex"

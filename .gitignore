@@ -5,3 +5,5 @@ grammars
 
 .dev/
 dist/
+
+node_modules/
