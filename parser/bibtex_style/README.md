@@ -5,3 +5,4 @@ An original Tree-sitter parser for BibTeX's .bst stack language. Highlight categ
 Generate src/parser.c with tree-sitter generate --abi 15 grammar.js. Zed compiles it with its managed WASI SDK. Generated headers originate from Tree-sitter (https://github.com/tree-sitter/tree-sitter, MIT).
 
 Validated using plain.bst, unsrt.bst, alpha.bst and abbrv.bst, and a fixture with nested blocks, negative integer literals, quoted variables and TeX-looking strings.
+LICENSE.tree-sitter applies to the generated Tree-sitter headers in src/tree_sitter, not to the original BST grammar.
