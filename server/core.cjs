@@ -85,7 +85,7 @@ function position(source,offset) { const before=source.slice(0,offset).split('\n
 function offset(source,pos) { const lines=source.split('\n');return lines.slice(0,pos.line).reduce((n,line)=>n+line.length+1,0)+pos.character; }
 function range(source,start,end=start+1) { return {start:position(source,start),end:position(source,end)}; }
 function uncachedIndex(files,docs) {
-  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),files:[]};
+  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),commandDefinitions:new Map(),environmentDefinitions:new Map(),files:[]};
   for(const filename of files){
     let source;try{source=read(filename,docs);}catch{continue;}
     result.files.push(filename);
@@ -100,20 +100,21 @@ function uncachedIndex(files,docs) {
     for(const item of modern.slice().reverse())clean=clean.slice(0,item.start)+clean.slice(item.start,item.end).replace(/[^\r\n]/g,' ')+clean.slice(item.end);
     for(const item of require('./declarations.cjs').scan(clean))definitions.push({name:item.name,start:item.start,entry:{file:filename,range:range(source,item.nameStart,item.nameEnd),declarationKind:item.declarationKind,aliasTarget:item.aliasTarget,declarationValue:item.declarationValue,declarationOptions:item.declarationOptions}});
     for(const match of clean.matchAll(/\\label\s*\{([^{}\\#]+)\}/g))result.labels.set(match[1],{file:filename,range:range(source,match.index,match.index+match[0].length)});
-    for(const match of clean.matchAll(/\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?\s*\{?\\([A-Za-z@]+)\}?|\\(?:[egx]?def)\s*\\([A-Za-z@]+)/g))definitions.push({name:match[1]||match[2],start:match.index,entry:{file:filename,range:range(source,match.index,match.index+match[0].length)}});
+    for(const item of require('./definition-candidates.cjs').legacy(clean))definitions.push({name:item.name,start:item.start,entry:{file:filename,range:range(source,item.start,item.end)}});
     for(const item of require('./environments.cjs').scan(clean))definitions.push({name:item.name,environment:true,start:item.start,entry:{...item,file:filename,range:range(source,item.nameStart,item.nameEnd)}});
-    for(const item of definitions.sort((a,b)=>a.start-b.start))(item.environment?result.environments:result.commands).set(item.name,item.entry);
+    for(const item of definitions.sort((a,b)=>a.start-b.start)){(item.environment?result.environments:result.commands).set(item.name,item.entry);require('./definition-candidates.cjs').add(item.environment?result.environmentDefinitions:result.commandDefinitions,item.name,item.entry);}
   }
   return result;
 }
 function index(files,docs) {
   files=[...files];
-  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),files:[]};
+  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),commandDefinitions:new Map(),environmentDefinitions:new Map(),files:[]};
   for(const filename of files){let fragment;try{fragment=sourceCache.analyze(filename,docs,'index',text=>uncachedIndex([filename],new Map([[key(filename),{text}]])));}catch{continue;}
     result.files.push(...fragment.files);for(const name of ['labels','citations','commands','environments'])for(const [label,entry] of fragment[name])result[name].set(label,entry);
+    for(const name of ['commandDefinitions','environmentDefinitions'])for(const [label,entries] of fragment[name])for(const entry of entries)require('./definition-candidates.cjs').add(result[name],label,entry);
   }
   const generated=sourceCache.project(files,docs,'generated-environments:'+JSON.stringify(files),()=>{const entries=[],registry=require('./wrappers.cjs').models(files,docs);for(const filename of files){let source;try{source=read(filename,docs);}catch{continue;}for(const env of require('./wrappers.cjs').environments(source,registry))entries.push([env.name,{file:filename,range:range(source,env.start,env.end),...env,detail:'生成命令：\\'+env.wrapper+' — '+env.heading}]);}return entries;});
-  for(const [name,entry] of generated)result.environments.set(name,entry);
+  for(const [name,entry] of generated){result.environments.set(name,entry);require('./definition-candidates.cjs').add(result.environmentDefinitions,name,entry);}
   return result;
 }
 function cachedProject(files,docs,tag,build){return sourceCache.project(files,docs,tag,build);}
