@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),core=require('../server/core.cjs'),hover=require('../server/hover.cjs');
+const file='fixture/hover.tex',source='\\newcommand\\first[1]{#1}\n\\newcommand\\second[2]{#1 & #2}\n\\newcommand\\third{third}',docs=new Map([[core.key(file),{text:source}]]),idx=core.index([file],docs),entry=idx.commands.get('second'),snippet=hover.declaration(source,entry);
+assert.equal(snippet,'\\newcommand\\second[2]{#1 & #2}');assert(!snippet.includes('first'));assert(!snippet.includes('third'));
+const card=hover.card('\\second{参数1}{参数2}','自定义命令\n参数说明',snippet,file+':2','存在 2 个候选');assert(card.startsWith('~~~latex\n'));assert(card.includes('\n\n**定义预览**\n\n~~~latex\n'));assert(card.includes('\n\n**来源**\n\n~~~text\n'));assert(card.includes('自定义命令  \n参数说明'));assert(card.includes('\n\n---\n\n'));
+assert.equal(hover.content('plain',card,['markdown']).kind,'markdown');assert.deepEqual(hover.content('plain',card,['plaintext']),{kind:'plaintext',value:'plain'});assert.equal(hover.content('plain',card,undefined).kind,'plaintext');
+assert(hover.code('~~~\n~~~latex').startsWith('~~~~latex'));assert(!hover.prose('[link](http://example.com) <script>').includes('<script>'));
+const long='\\newcommand\\long{\n'+Array.from({length:15},(_,i)=>'line '+i).join('\n')+'\n}',longEntry=core.index([file],new Map([[core.key(file),{text:long}]])).commands.get('long');assert(hover.declaration(long,longEntry).includes('源码预览已省略'));
+const changed='\\renewcommand\\second[1]{updated}',changedEntry=core.index([file],new Map([[core.key(file),{text:changed}]])).commands.get('second');assert.equal(hover.declaration(changed,changedEntry),changed);
+console.log('PASS hover presentation: LaTeX/text fences, section spacing, exact declaration, bounded preview, safe Markdown text/fences, capability fallback and unsaved invalidation');

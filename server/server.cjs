@@ -175,22 +175,22 @@ async function installedTexNames(){
   const key=JSON.stringify(directories),catalogConfig={...config,'latex.tools.searchPaths':directories};if(texCatalog.has(key))return texCatalog.get(key);
   const result=(async()=>{try{const processResult=await run('kpsewhich',['--var-value=TEXMFDIST'],{cwd:folders[0],config:catalogConfig,timeoutMs:3000});if(processResult.code!==0)return {packages:[],classes:[]};const directory=processResult.output.trim();if(!directory)return {packages:[],classes:[]};return completion.parseDatabase(await fs.promises.readFile(path.join(directory,'ls-R'),'utf8'));}catch{return {packages:[],classes:[]};}})();texCatalog.set(key,result);return result;
 }
-function commandInfo(name,idx){const info=singleCommandInfo(name,idx);return info?{...info,documentation:info.documentation+require('./definition-candidates.cjs').notice(idx.commandDefinitions,name,idx.commands.get(name))}:info;}
+function commandInfo(name,idx){const info=singleCommandInfo(name,idx);if(!info)return info;const entry=idx.commands.get(name),notice=require('./definition-candidates.cjs').notice(idx.commandDefinitions,name,entry);return {...info,documentation:info.documentation+notice,markdown:preview.card(info.signature,info.description,entry?preview.declaration(core.read(entry.file,docs),entry):undefined,entry?entry.file+':'+(entry.range.start.line+1):undefined,notice,info.variants)};}
 function singleCommandInfo(name,idx){
   const entry=idx.commands.get(name);
   if(entry?.declarationKind){
     const signature='\\'+name,source=core.read(entry.file,docs);let details=entry.declarationKind;
     if(entry.aliasTarget){const alias=require('./declarations.cjs').alias(name,idx.commands);details+='\n静态复制来源：'+['\\'+name,...alias.chain.map(item=>'\\'+item)].join(' → ');if(alias.cycle||alias.limited)details+='\n别名链循环或过长，不推断参数。';else if(alias.entry)details+='\n当前索引中的原命令：'+alias.entry.file+':'+(alias.entry.range.start.line+1);details+='\n不模拟复制时的运行状态，不推断别名参数。';}
     else details+='\n'+(entry.declarationKind==='DeclareSIUnit'?'单位内容：':'运算符内容：')+(entry.declarationValue||'').replace(/\s+/g,' ').slice(0,500)+(entry.declarationOptions?'\n声明选项：'+entry.declarationOptions:'');
-    return {signature,snippet:name,documentation:signature+'\n'+details+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};
+    return {signature,snippet:name,description:details,documentation:signature+'\n'+details+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};
   }
   if(entry){const source=core.read(entry.file,docs),modern=entry.documentSpec!==undefined?require('./document-commands.cjs').signature(name,entry.documentSpec):null;
     const signature=entry.documentSpec!==undefined?(modern?.signature||'\\'+name):commandHelp.custom(name,source,entry)||'\\'+name;
     const snippet=entry.documentSpec!==undefined?(modern?.snippet||name):signature.slice(1).replace(/参数(\d)/g,(_,n)=>String.fromCharCode(36)+'{'+n+':参数'+n+'}');
-    return {signature,snippet,documentation:signature+'\n自定义命令'+(entry.documentSpec!==undefined?'\n参数声明：'+entry.documentSpec+'\n'+(modern?.details||'该参数声明暂不推断调用签名；保留原始声明。'):'')+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};}
+    return {signature,snippet,description:'自定义命令'+(entry.documentSpec!==undefined?'\n参数声明：'+entry.documentSpec+'\n'+(modern?.details||'该参数声明暂不推断调用签名。'):''),documentation:signature+'\n自定义命令'+(entry.documentSpec!==undefined?'\n参数声明：'+entry.documentSpec+'\n'+(modern?.details||'该参数声明暂不推断调用签名；保留原始声明。'):'')+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};}
   const record=idx.packageCommands.get(name),help=commandHelp.HELP[name];
-  if(record)return {signature:record.signature,snippet:record.snippet,documentation:[...record.variants.slice(0,4),'宏包：'+record.package,help?.[1]||record.description].filter(Boolean).join('\n\n')};
-  if(help)return {signature:help[0],snippet:completion.snippets(name)?.[0]||name,documentation:help[0]+'\n\n'+help[1]};
+  if(record)return {signature:record.signature,snippet:record.snippet,description:['宏包：'+record.package,help?.[1]||record.description].filter(Boolean).join('\n'),variants:record.variants,documentation:[...record.variants.slice(0,4),'宏包：'+record.package,help?.[1]||record.description].filter(Boolean).join('\n\n')};
+  if(help)return {signature:help[0],description:help[1],snippet:completion.snippets(name)?.[0]||name,documentation:help[0]+'\n\n'+help[1]};
   return null;
 }
 async function completions(url,pos){
@@ -241,9 +241,9 @@ function definition(url,pos){
   const idx=projectIndex(core.file(url)),environment=require('./environments.cjs').at(source,pos),name=commandHelp.at(source,pos)?.name||symbolAt(url,pos),entry=environment?idx.environments.get(environment.name):(idx.commands.get(name)||idx.environments.get(name));return entry?require('./definition-candidates.cjs').ordered(environment?idx.environmentDefinitions:idx.commands.has(name)?idx.commandDefinitions:idx.environmentDefinitions,environment?.name||name,entry).map(item=>({uri:core.uri(item.file),range:item.range})):[];
 }
 function hover(url,pos){
-  const environment=require('./environments.cjs').at(text(url),pos);if(environment){const idx=projectIndex(core.file(url)),entry=idx.environments.get(environment.name);if(entry){const info=require('./environments.cjs').info(environment.name,entry);return {range:environment.range,contents:{kind:'plaintext',value:info.documentation+require('./definition-candidates.cjs').notice(idx.environmentDefinitions,environment.name,entry)}};}}
+  const environment=require('./environments.cjs').at(text(url),pos);if(environment){const idx=projectIndex(core.file(url)),entry=idx.environments.get(environment.name);if(entry){const info=require('./environments.cjs').info(environment.name,entry),notice=require('./definition-candidates.cjs').notice(idx.environmentDefinitions,environment.name,entry),description=info.documentation.slice(info.signature.length).trim();return {range:environment.range,contents:preview.content(info.documentation+notice,preview.card(info.signature,description,preview.declaration(core.read(entry.file,docs),entry),entry.file+':'+(entry.range.start.line+1),notice),clientCapabilities.textDocument?.hover?.contentFormat)};}}
   const command=commandHelp.at(text(url),pos);
-  if(command){const idx=projectIndex(core.file(url)),raw=command.name+(text(url).slice(core.offset(text(url),command.range.start),core.offset(text(url),command.range.end)).endsWith('*')?'*':''),info=commandInfo(raw,idx)||commandInfo(command.name,idx);if(info)return {range:command.range,contents:{kind:'plaintext',value:info.documentation}};}
+  if(command){const idx=projectIndex(core.file(url)),raw=command.name+(text(url).slice(core.offset(text(url),command.range.start),core.offset(text(url),command.range.end)).endsWith('*')?'*':''),info=commandInfo(raw,idx)||commandInfo(command.name,idx);if(info)return {range:command.range,contents:preview.content(info.documentation,info.markdown,clientCapabilities.textDocument?.hover?.contentFormat)};}
   const reference=referenceTarget(url,pos);
   if(reference){const {target,definitions}=reference;if(!definitions.length)return null;if(definitions.length>1)return {range:target.range,contents:{kind:'plaintext',value:target.name+' — multiple definitions\n'+definitions.map(item=>item.file+':'+(item.range.start.line+1)).join('\n')}};
     const entry=definitions[0],source=core.read(entry.file,docs),where=entry.file+':'+(entry.range.start.line+1);let value;
@@ -344,7 +344,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},signatureHelpProvider:{triggerCharacters:['{','[','*'],retriggerCharacters:['}',']']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.26'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},signatureHelpProvider:{triggerCharacters:['{','[','*'],retriggerCharacters:['}',']']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.27'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

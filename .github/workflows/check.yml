@@ -38,6 +38,12 @@ jobs:
       - name: Check modern document commands
         run: node tests/document-commands-probe.cjs
 
+      - name: Check hover presentation
+        run: node tests/hover-presentation-probe.cjs
+      - name: Check Markdown hover LSP
+        run: node tests/navigation-probe.cjs
+        env:
+          HOVER_MARKDOWN: '1'
       - name: Check parameter signature help
         run: node tests/signature-help-probe.cjs
       - name: Check definition candidates
