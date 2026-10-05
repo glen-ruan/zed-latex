@@ -5,6 +5,10 @@ try{
  fs.writeFileSync(a,'alpha');fs.writeFileSync(b,'beta');let parses=0,builds=0;const cache=new SourceCache(),parse=text=>{parses++;return text.toUpperCase();};
  assert.equal(cache.analyze(a,null,'test',parse),'ALPHA');assert.equal(cache.analyze(a,null,'test',parse),'ALPHA');assert.equal(parses,1);
  cache.analyze(b,null,'test',parse);fs.writeFileSync(a,'gamma');assert.equal(cache.analyze(a,null,'test',parse),'GAMMA');cache.analyze(b,null,'test',parse);assert.equal(parses,3,'Unchanged file was reparsed');
+
+ // Force equal metadata to make the rapid-write regression deterministic on all platforms.
+ const statSync=fs.statSync;let fixed=null;try{fixed=statSync(a,{bigint:true});fs.statSync=(file,options)=>path.resolve(file)===path.resolve(a)?fixed:statSync(file,options);cache.analyze(a,null,'test',parse);fs.writeFileSync(a,'delta');assert.equal(cache.analyze(a,null,'test',parse),'DELTA');}finally{fs.statSync=statSync;}fs.writeFileSync(a,'gamma');
+
  const docs=new Map([[core.key(a),{text:'unsaved',version:1}]]);assert.equal(cache.analyze(a,docs,'test',parse),'UNSAVED');docs.get(core.key(a)).text='same-version edit';assert.equal(cache.analyze(a,docs,'test',parse),'SAME-VERSION EDIT');docs.clear();assert.equal(cache.analyze(a,docs,'test',parse),'GAMMA');
  const build=()=>++builds;assert.equal(cache.project([a,b,missing],null,'one',build),1);assert.equal(cache.project([a,b,missing],null,'one',build),1);fs.writeFileSync(missing,'new');assert.equal(cache.project([a,b,missing],null,'one',build),2);fs.unlinkSync(b);assert.equal(cache.project([a,b,missing],null,'one',build),3);assert.equal(cache.project([a],null,'one',build),4);
  const bounded=new SourceCache({maxFiles:1,maxBytes:6,maxProjects:1});bounded.analyze(a,null,'test',parse);bounded.analyze(missing,null,'test',parse);assert.equal(bounded.files.size,1);assert(bounded.bytes<=6);bounded.project([a],null,'a',build);bounded.project([missing],null,'b',build);assert.equal(bounded.projects.size,1);bounded.clear();assert.equal(bounded.files.size,0);assert.equal(bounded.projects.size,0);

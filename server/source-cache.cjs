@@ -7,7 +7,7 @@ class SourceCache {
   const filename=key(file),doc=docs?.get(filename);let stamp=null,text;
   if(doc)text=doc.text;else {const stat=fs.statSync(file,{bigint:true});stamp=[stat.mtimeNs,stat.ctimeNs,stat.size,stat.ino].join(':');}
   let entry=this.files.get(filename);
-  if(!doc&&entry?.stamp===stamp){this.files.delete(filename);this.files.set(filename,entry);return entry;}
+  // Windows can preserve all stat fields across rapid same-size writes: verify actual text before reusing analysis.
   if(!doc)text=fs.readFileSync(file,'utf8');
   if(!entry||entry.text!==text){if(entry)this.bytes-=entry.bytes;entry={text,stamp,revision:++this.serial,analyses:new Map(),bytes:Buffer.byteLength(text,'utf8')};this.bytes+=entry.bytes;}
   else entry.stamp=stamp;

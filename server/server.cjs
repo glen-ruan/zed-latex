@@ -177,6 +177,12 @@ async function installedTexNames(){
 }
 function commandInfo(name,idx){
   const entry=idx.commands.get(name);
+  if(entry?.declarationKind){
+    const signature='\\'+name,source=core.read(entry.file,docs);let details=entry.declarationKind;
+    if(entry.aliasTarget){const alias=require('./declarations.cjs').alias(name,idx.commands);details+='\n静态复制来源：'+['\\'+name,...alias.chain.map(item=>'\\'+item)].join(' → ');if(alias.cycle||alias.limited)details+='\n别名链循环或过长，不推断参数。';else if(alias.entry)details+='\n当前索引中的原命令：'+alias.entry.file+':'+(alias.entry.range.start.line+1);details+='\n不模拟复制时的运行状态，不推断别名参数。';}
+    else details+='\n'+(entry.declarationKind==='DeclareSIUnit'?'单位内容：':'运算符内容：')+(entry.declarationValue||'').replace(/\s+/g,' ').slice(0,500)+(entry.declarationOptions?'\n声明选项：'+entry.declarationOptions:'');
+    return {signature,snippet:name,documentation:signature+'\n'+details+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};
+  }
   if(entry){const source=core.read(entry.file,docs),modern=entry.documentSpec!==undefined?require('./document-commands.cjs').signature(name,entry.documentSpec):null;
     const signature=entry.documentSpec!==undefined?(modern?.signature||'\\'+name):commandHelp.custom(name,source,entry)||'\\'+name;
     const snippet=entry.documentSpec!==undefined?(modern?.snippet||name):signature.slice(1).replace(/参数(\d)/g,(_,n)=>String.fromCharCode(36)+'{'+n+':参数'+n+'}');
@@ -335,7 +341,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.19'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.20'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

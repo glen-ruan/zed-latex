@@ -1,6 +1,11 @@
 'use strict';
 const core=require('./core.cjs');
 const HELP={
+ DeclareSIUnit:['\\DeclareSIUnit[选项]{\\单位命令}{单位内容}','siunitx：声明自定义单位，可在 unit/qty 的单位参数中使用。'],
+ DeclareMathOperator:['\\DeclareMathOperator{\\命令}{运算符文字}\n\\DeclareMathOperator*{\\命令}{运算符文字}','amsmath：声明数学运算符；星号形式支持上下限排版。'],
+ NewCommandCopy:['\\NewCommandCopy{\\新命令}{\\已有命令}','复制当前命令定义；已有命令随后重定义不会改变这份复制。'],
+ let:['\\let\\新命令=\\已有命令','TeX 原语：复制一个 token 当前的含义；不等同于完整复制所有 LaTeX robust 命令实现。'],
+
  import:['\\import{主文件相对目录}{文件名}','import：从指定目录导入文件；被导入文件的 input 和图片查找优先使用该目录。'],
  subimport:['\\subimport{当前导入目录的相对路径}{文件名}','import：在当前导入目录基础上继续导入子文件；目录和文件参数分别补全。'],
  InputIfFileExists:['\\InputIfFileExists{文件名}{存在时执行}{不存在时执行}','文件存在时读取它；插件追踪静态文件名，以索引模块中的命令定义。'],

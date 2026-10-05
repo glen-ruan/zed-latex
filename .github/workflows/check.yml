@@ -48,3 +48,6 @@ jobs:
 
       - name: Check source index caching
         run: node tests/source-cache-probe.cjs
+
+      - name: Check special declarations and aliases
+        run: node tests/declarations-probe.cjs

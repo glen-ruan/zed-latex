@@ -16,3 +16,5 @@ PDF recovery: node tests/recovery-probe.cjs checks retry decisions and a real Wi
 诊断归属：`node tests/build-diagnostics-probe.cjs`；`workshop-probe.cjs` 还模拟两个主文件的外部构建日志，检查共享错误合并及独立清除。
 
 索引缓存：`node tests/source-cache-probe.cjs` 检查失效、局部解析和淘汰；输出隔离索引阶段的冷/热耗时，不代表 Zed 整体响应时间。
+
+特殊声明：`node tests/declarations-probe.cjs`；导航探针同时检查单位、复制来源以及删除声明后的补全。缓存探针模拟相同磁盘元数据的内容变更，防止快速写入漏更新。

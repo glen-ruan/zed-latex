@@ -17,7 +17,7 @@ function group(text,start,open='{',close='}') {
 }
 function display(value){return value.replace(/\s+/g,' ').trim();}
 function symbols(source,api){
-  const clean=api.mask(source),nodes=[],sections=[],envs=[];
+  const clean=api.mask(source),nodes=[],sections=[],envs=[],declarations=new Map(require('./declarations.cjs').scan(clean).map(item=>[item.start,item.end]));
   function add(name,kind,start,end,selection,detail){
     const item={name,kind,detail,start,end,selection,children:[]};nodes.push(item);return item;
   }
@@ -27,7 +27,8 @@ function symbols(source,api){
     let preceding=0;for(let i=match.index-1;i>=0&&clean[i]==='\\';i--)preceding++;
     if(preceding%2)continue;
     const command=match[1],level=LEVELS.indexOf(command);let cursor=tokens.lastIndex;
-    if(require('./document-commands.cjs').FAMILY.test(command)){
+    if(declarations.has(match.index)){tokens.lastIndex=declarations.get(match.index);
+    }else if(require('./document-commands.cjs').FAMILY.test(command)){
       const definition=require('./document-commands.cjs').definition(clean,match.index);if(definition)tokens.lastIndex=definition.end;
     }else if(level>=0||command==='caption'){
       const optional=group(clean,cursor,'[',']');if(optional)cursor=optional.next;
