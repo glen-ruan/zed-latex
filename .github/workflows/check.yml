@@ -31,3 +31,5 @@ jobs:
         run: node tests/references-probe.cjs
       - name: Check source structure
         run: node tests/structure-probe.cjs
+      - name: Check configuration reports
+        run: node tests/config-check-probe.cjs

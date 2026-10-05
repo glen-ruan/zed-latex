@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.12
+
+- Aggregate configuration errors with setting keys and actionable hints, including recipe/tool shapes, empty or duplicate recipes, unknown tool references and placeholders.
+- Check main-file resolution, working/search directories, blocked output paths and selected tool availability without executing tools or modifying configuration.
+- Expand supported _W32 placeholders correctly and flag unknown placeholders containing digits.
+- Keep the configuration-check action available for malformed recipe arrays; distinguish skipped checks, missing required tools and optional warnings.
+- Return issues even when a report cannot be saved, with complete language-server log output. Retain the latex-workshop.checkTools command identifier.
+
+
 ## 0.4.11
 
 - Extend Zed native outline queries with floats, captions, mathematical environments and label keys.

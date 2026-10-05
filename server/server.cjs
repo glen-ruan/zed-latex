@@ -7,6 +7,7 @@ const core=require('./core.cjs');
 const recovery=require('./build-retry.cjs');
 const report=require('./build-report.cjs');
 const tools=require('./tools.cjs');
+const configCheck=require('./config-check.cjs');
 const references=require('./references.cjs');
 const completion=require('./completion.cjs');
 const preview=require('./hover.cjs');
@@ -264,9 +265,9 @@ function actions(url){
   const filename=core.file(url);if(!core.TEX.test(filename))return [];
   const result=[{title:'Build LaTeX project',kind:'source',command:{title:'Build LaTeX project',command:'latex-workshop.build',arguments:[url]}}];
   result.push({title:'Clean LaTeX project',kind:'source',command:{title:'Clean LaTeX project',command:'latex-workshop.clean',arguments:[url]}});
-  result.push({title:'Check LaTeX tools',kind:'source',command:{title:'Check LaTeX tools',command:'latex-workshop.checkTools',arguments:[url]}});
+  result.push({title:'Check LaTeX configuration and tools',kind:'source',command:{title:'Check LaTeX configuration and tools',command:'latex-workshop.checkTools',arguments:[url]}});
   result.push({title:'Show LaTeX build log',kind:'source',command:{title:'Show LaTeX build log',command:'latex-workshop.showLog',arguments:[url]}});
-  for(const recipe of config['latex.recipes'])result.push({title:'Build with recipe: '+recipe.name,kind:'source',command:{title:recipe.name,command:'latex-workshop.recipes',arguments:[url,recipe.name]}});
+  for(const recipe of (Array.isArray(config['latex.recipes'])?config['latex.recipes']:[]).filter(item=>item&&typeof item.name==='string'))result.push({title:'Build with recipe: '+recipe.name,kind:'source',command:{title:recipe.name,command:'latex-workshop.recipes',arguments:[url,recipe.name]}});
   if(jobs.size)result.push({title:'Terminate LaTeX compilation',kind:'source',command:{title:'Terminate compilation',command:'latex-workshop.kill',arguments:[url]}});
   return result;
 }
@@ -288,19 +289,20 @@ function workspaceSymbols(query){
   }return result;
 }
 async function checkTools(active){
-  const root=resolveRoot(active),recipe=core.recipe(root,config,folders.find(folder=>root.startsWith(folder)),undefined,lastRecipes.get(core.key(root)));
-  const rows=['LaTeX tool check',new Date().toISOString(),'Project: '+root,'Recipe: '+recipe.name,'Output: '+recipe.output,'Node: '+process.version+' — '+process.execPath,''];
-  let missing=0;const found=[];
-  function check(label,command,required=true,env={},cwd=recipe.cwd){try{const launch=tools.launch(command,{overrides:env,directories:config['latex.tools.searchPaths'],cwd});rows.push('[OK] '+label+': '+launch.command);found.push(path.dirname(launch.command));return launch;}catch(error){rows.push('['+(required?'MISSING':'OPTIONAL')+'] '+label+': '+error.message);if(required)missing++;}}
-  for(const step of recipe.steps){const launch=check('Recipe tool',step.command,true,step.env,step.cwd||recipe.cwd);if(launch&&/^latexmk(?:\.exe|\.pl)?$/i.test(path.basename(step.command))){const engine=step.args.some(arg=>/^-?(?:xelatex|pdfxe)$/.test(arg))?'xelatex':step.args.some(arg=>/^-?(?:lualatex|pdflua)$/.test(arg))?'lualatex':step.args.includes('-pdf')?'pdflatex':null;if(engine){try{const tool=tools.launch(engine,{base:launch.env,cwd:step.cwd||recipe.cwd});rows.push('[OK] Engine: '+tool.command);}catch(error){missing++;rows.push('[MISSING] Engine: '+error.message);}}}}
-  const first=recipe.steps[0];const clean=config['latex.clean.command']==='latexmk'&&/^latexmk(?:\.exe|\.pl)?$/i.test(path.basename(first?.command||''))?first.command:config['latex.clean.command'];check('Cleanup',clean,false,first?.env,first?.cwd||recipe.cwd);
-  const formatter=config['formatting.latex'];if(formatter!=='none')check('Formatter',config['formatting.'+formatter+'.path']||formatter);
-  try{const tool=tools.launch('kpsewhich',{directories:[...config['latex.tools.searchPaths'],...found],cwd:recipe.cwd});rows.push('[OK] Package catalog: '+tool.command);}catch{rows.push('[OPTIONAL] kpsewhich unavailable; installed-package completion requires kpsewhich and a TeX filename database.');}
-  rows.push('','Required tools missing: '+missing,'No settings or environment variables were modified.');
-  const filename=path.join(recipe.output,path.basename(root,path.extname(root))+'.latex-workshop-tools.log');report.save(filename,rows);
-  show((missing?'LaTeX tools need attention: '+missing+' missing.':'LaTeX tools found for '+recipe.name)+ '\nReport: '+filename,missing?1:3);
-  if(clientCapabilities.window?.showDocument?.support)await request('window/showDocument',{uri:core.uri(filename),external:false,takeFocus:true},3000).catch(()=>{});
-  return {missing,report:core.uri(filename)};
+  let root,rootIssue;try{root=resolveRoot(active);if(!fs.statSync(root).isFile())throw Error('Main file is not a file: '+root);}catch(error){root=active;rootIssue={setting:'latex.rootFile',severity:'error',message:error.message,hint:'Open the project folder and set % !TeX root = relative/path.tex, or configure latex.rootFile with an existing main file.'};}
+  const checked=rootIssue?{issues:configCheck.validate(config),rows:['[SKIPPED] Executable checks: main file could not be resolved.'],recipe:null,missing:0}:configCheck.inspect(config,root,folders.find(folder=>root.startsWith(folder)),lastRecipes.get(core.key(root)));
+  if(rootIssue)checked.issues.unshift(rootIssue);
+  const rows=['LaTeX configuration and tool check',new Date().toISOString(),'Project: '+root,'Recipe: '+(checked.recipe?.name||'(unavailable)'),'Output: '+(checked.recipe?.output||'(unavailable)'),'Node: '+process.version+' — '+process.execPath,'',...checked.rows];
+  let filename=null;
+  try{const output=checked.issues.some(issue=>issue.severity==='error'&&issue.setting==='latex.outDir'&&/placeholder/i.test(issue.message))?path.join(path.dirname(root),'build'):(checked.recipe?.output||path.join(path.dirname(root),'build'));filename=path.join(output,path.basename(root,path.extname(root))+'.latex-workshop-tools.log');}catch{}
+  function detail(){return [...rows,'',...checked.issues.flatMap(issue=>['['+issue.severity.toUpperCase()+'] '+issue.setting+': '+issue.message,'  Fix: '+issue.hint]),'','No settings or environment variables were modified.'];}
+  if(filename)try{report.save(filename,detail());}catch(error){checked.issues.push({setting:'report path',severity:'warning',message:'Cannot save report: '+error.message,hint:'Choose a writable latex.outDir. The full report is available in the language-server log.'});filename=null;}
+  const errors=checked.issues.filter(issue=>issue.severity==='error').length,warnings=checked.issues.filter(issue=>issue.severity==='warning').length;
+  const summary='LaTeX configuration: '+errors+' errors, '+warnings+' warnings, '+checked.missing+' required tools missing.'+(!checked.recipe?' Executable checks were skipped.':'');
+  notify('window/logMessage',{type:errors?1:3,message:detail().join('\n')});
+  show(summary+'\n'+checked.issues.slice(0,3).map(issue=>issue.setting+': '+issue.message+' Fix: '+issue.hint).join('\n')+(filename?'\nReport: '+filename:''),errors?1:warnings?2:3);
+  if(filename&&clientCapabilities.window?.showDocument?.support)await request('window/showDocument',{uri:core.uri(filename),external:false,takeFocus:true},3000).catch(()=>{});
+  return {missing:checked.missing,errors,warnings,issues:checked.issues,report:filename?core.uri(filename):null,toolChecksSkipped:!checked.recipe};
 }
 async function openBuildLog(active){
   const root=resolveRoot(active),rootKey=core.key(root);
@@ -314,7 +316,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.11'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.12'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

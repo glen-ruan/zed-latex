@@ -147,7 +147,7 @@ F4 中直接执行 latexmk 的原生任务仍是独立入口，不会经过插�
 
 usepackage/RequirePackage 与 documentclass 补全读取本机 kpsewhich 返回的 TEXMFDIST 文件名数据库，并包含项目中的 sty/cls 文件。数据库按工具路径缓存，新增安装的包需要重启服务刷新；没有 kpsewhich 或 ls-R 时仍可补全项目本地包，不宣称覆盖所有发行版。命令补全为支持 snippets 的编辑器提供 frac、sqrt、文字样式、章节和环境等参数片段。工作区符号搜索支持跨文件章节标题、公式环境、图表标题和标签键，结果附带来源文件。
 
-通过代码操作 **Check LaTeX tools** 检查当前配方工具、可识别的 latexmk 引擎、启用的格式化器，以及清理工具和包目录工具。报告保存为输出目录中的 `<主文件名>.latex-workshop-tools.log`；支持 showDocument 的客户端会打开报告。检查只查找程序，不执行编译、不安装依赖、不改写设置；实际工具运行和 TeX 包依赖仍由构建验证。
+通过代码操作 **Check LaTeX configuration and tools** 检查当前配方工具、可识别的 latexmk 引擎、启用的格式化器，以及清理工具和包目录工具。报告保存为输出目录中的 `<主文件名>.latex-workshop-tools.log`；支持 showDocument 的客户端会打开报告。检查包含配置验证和程序查找，不执行编译、不安装依赖、不改写设置；实际工具运行和 TeX 包依赖仍由构建验证。
 
 工具 env 支持 `${env:变量名}` 和 `$PATH` 引用继承环境，Windows 下环境变量名不区分大小写。例如导入 Workshop 的 `Path: "工具目录;${env:Path}"` 能保留原 PATH。这里是字符串替换，不执行 shell 表达式。无需向 tasks 添加包装脚本。
 ## 0.4.8 引用悬停与定位
@@ -180,3 +180,17 @@ newcommand、renewcommand、providecommand、DeclareRobustCommand 风格的项�
 - 按 Zed 标准 outline.scm 捕获方式实现原生大纲，不依赖编辑器是否采用 LSP documentSymbol。两种大纲的条目和层级可能不同；目前不合并跨文件 outline 树，也不推算 PDF 中的章节/图表编号。静态扫描不能执行条件分支或动态宏。
 
 更新后，在当前文件的大纲中查找 caption 或 label；跨文件使用命令面板的项目符号搜索，输入标签键或图表标题即可定位。原生大纲和项目符号搜索是不同入口。
+
+
+## 0.4.12 配置检查
+
+使用代码操作 **Check LaTeX configuration and tools**，检查当前合并后的有效配置（Zed 的 lsp.latex-workshop.settings 优先于导入的 .vscode Workshop 设置）。命令标识仍为 latex-workshop.checkTools，原有调用方式有效。
+
+- 汇总配方/工具数组类型错误、空步骤、重名、未知工具引用、未知默认配方、不支持的格式化器和未知占位符，每条附带设置键及 Fix 修正提示。
+- 检查主文件、当前配方的工作目录、搜索路径、输出目录的阻挡文件，以及当前配方工具、可识别的 latexmk 引擎和启用的格式化器。尚未创建的 build 目录是正常状态；searchPaths 中无效目录和可选工具缺失作为警告。
+- 配置或主文件无法解析时明确标注跳过可执行文件检查，不能把 missing=0 当作工具验证成功。目录检查不能保证之后的实际编译不会遇到权限变化或阅读器占用。
+- 报告保存到输出目录的 <主文件名>.latex-workshop-tools.log；报告路径不可写时，仍通过消息及语言服务器日志显示问题，返回空报告路径。
+
+检查不执行编译器、不安装依赖、不改写设置；它会写入检查报告。它检查本插件支持的配置和当前配方，未验证所有 LaTeX Workshop 选项、其他配方的可执行文件或 Zed 顶层设置 schema。
+
+配方和命名工具的格式参考 [LaTeX Workshop 官方编译说明](https://github.com/James-Yu/LaTeX-Workshop/wiki/Compile#latex-recipes)。

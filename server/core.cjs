@@ -142,11 +142,12 @@ function syntaxDiagnostics(source,filename) {
 function placeholders(root,outDir,workspace,jobname) {
   const dir=path.dirname(root),stem=path.basename(root,path.extname(root)),doc=path.join(dir,stem);
   const first={DOC:doc,DOC_EXT:root,DOCFILE:stem,DOCFILE_EXT:path.basename(root),DIR:dir,WORKSPACE_FOLDER:workspace || dir,TMPDIR:require('node:os').tmpdir(),RELATIVE_DIR:path.relative(workspace || dir,dir),RELATIVE_DOC:path.relative(workspace || dir,doc)};
-  const replaceFirst=s=>String(s).replace(/%([A-Z_]+)%/g,(all,name)=>first[name] ?? all);
+  const firstWindows=Object.fromEntries(Object.entries(first).map(([name,value])=>[name+'_W32',value.replace(/\\/g,'/').replace(/\//g,'\\')]));
+  const replaceFirst=s=>String(s).replace(/%([A-Z_][A-Z_0-9]*)%/g,(all,name)=>first[name] ?? firstWindows[name] ?? all);
   const output=path.resolve(dir,replaceFirst(outDir));
   const values={...first,OUTDIR:output,AUXDIR:output,TMPFILE:'',JOBNAME:jobname || stem};
   for(const [name,value] of Object.entries({...values}))values[name+'_W32']=value.replace(/\\/g,'/').replace(/\//g,'\\');
-  return {output,expand:s=>String(s).replace(/%([A-Z_]+)%/g,(all,name)=>values[name] ?? all),values};
+  return {output,expand:s=>String(s).replace(/%([A-Z_][A-Z_0-9]*)%/g,(all,name)=>values[name] ?? all),values};
 }
 function recipe(root,config,workspace,name,lastRecipe) {
   const source=read(root),values=placeholders(root,config['latex.outDir'],workspace,config['latex.jobname']);
