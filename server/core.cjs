@@ -117,6 +117,7 @@ function index(files,docs) {
   for(const [name,entry] of generated){result.environments.set(name,entry);require('./definition-candidates.cjs').add(result.environmentDefinitions,name,entry);}
   return result;
 }
+function analyzeSource(file,docs,tag,parse){return sourceCache.analyze(file,docs,tag,parse);}
 function cachedProject(files,docs,tag,build){return sourceCache.project(files,docs,tag,build);}
 function symbols(source) { return require('./structure.cjs').symbols(source,{mask,range}); }
 function diagnostic(message,source,start,severity=1) { return {source:'latex-workshop',message,severity,range:range(source,start,Math.min(start+1,source.length))}; }
@@ -167,4 +168,4 @@ function recipe(root,config,workspace,name,lastRecipe) {
   return {name:program || chosen.name,output:values.output,cwd:config['latex.build.fromFolder']?path.resolve(path.dirname(root),values.expand(config['latex.build.fromFolder'])):path.dirname(root),steps:tools.map(tool=>({cwd:tool.cwd?path.resolve(path.dirname(root),values.expand(tool.cwd)):undefined,command:values.expand(tool.command),args:(tool.args||[]).map(values.expand),env:Object.fromEntries(Object.entries(tool.env||{}).map(([k,v])=>[k,values.expand(v)]))}))};
 }
 function logDiagnostics(output,root,options) { return require('./tex-log.cjs').parse(output,root,options); }
-module.exports={cachedProject,workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};
+module.exports={analyzeSource,cachedProject,workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};

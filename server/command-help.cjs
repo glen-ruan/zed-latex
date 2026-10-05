@@ -40,9 +40,7 @@ function at(source,pos){const offset=core.offset(source,pos);for(const match of 
 function custom(name,source,entry){
  const start=core.offset(source,entry.range.start),end=core.offset(source,entry.range.end),prefix=source.slice(start,end);
  if(!/^\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\b/.test(prefix))return null;
- let remaining=source.slice(end),count=0,optional=false;const args=/^\s*\[(\d)\]/.exec(remaining);
- if(args){count=Number(args[1]);remaining=remaining.slice(args[0].length);optional=/^\s*\[/.test(remaining);}
- let signature='\\'+name;for(let i=1;i<=count;i++)signature+=(optional&&i===1?'[参数'+i+']':'{参数'+i+'}');
- return signature;
+ const docs=new Map([[core.key(entry.file),{text:source}]]),models=core.analyzeSource(entry.file,docs,'wrapper-definitions',require('./wrappers.cjs').definitions),model=models.find(item=>item.name===name&&item.start===start);if(!model)return null;
+ let signature='\\'+name;for(let i=0;i<model.args.length;i++)signature+=(model.args[i].optional?'[参数'+(i+1)+']':'{参数'+(i+1)+'}');return signature;
 }
 module.exports={HELP,at,custom};

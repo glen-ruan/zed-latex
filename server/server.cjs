@@ -344,7 +344,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.25'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},signatureHelpProvider:{triggerCharacters:['{','[','*'],retriggerCharacters:['}',']']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.26'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.
@@ -371,6 +371,7 @@ async function handle(method,params){
     for(const change of params.changes){const filename=core.file(change.uri);if(core.SOURCE.test(filename)){refresh();if(config['latex.autoBuild.run']==='onFileChange')schedule(filename);}}return;
   }
   if(method==='textDocument/completion')return completions(params.textDocument.uri,params.position);
+  if(method==='textDocument/signatureHelp'){const filename=core.file(params.textDocument.uri),idx=projectIndex(filename),signatures=require('./signature-help.cjs');return signatures.help(text(params.textDocument.uri),params.position,signatures.describe(idx,docs,commandInfo),clientCapabilities.textDocument?.signatureHelp?.signatureInformation?.parameterInformation?.labelOffsetSupport);}
   if(method==='textDocument/definition')return definition(params.textDocument.uri,params.position);
   if(['textDocument/references','textDocument/prepareRename','textDocument/rename'].includes(method)){
     const file=core.file(params.textDocument.uri),files=[...core.dependencies(resolveRoot(file),docs)],items=references.occurrences(files,docs),target=references.at(items,file,params.position);
