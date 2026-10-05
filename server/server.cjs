@@ -50,7 +50,13 @@ function projectSettings(){
 function globalConfig(){return config;}
 function configure(raw){config=core.settings({...projectSettings(),...(raw['latex-workshop'] || raw)});refresh();}
 function resolveRoot(active){return core.rootFile(active,folders,docs,config['latex.rootFile']);}
-function projectIndex(active){let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}const context=packageData.context(files,folders,docs);const all=[...new Set([...context.localFiles,...files])],library=all.filter(file=>/\.(cls|sty|def|cfg)$/i.test(file)),content=all.filter(file=>!library.includes(file));return {...core.index([...library,...content],docs),...context};}
+function projectIndex(active){
+  let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}
+  return core.cachedProject(files,docs,JSON.stringify([folders,files[0]]),()=>{
+    const context=packageData.context(files,folders,docs),all=[...new Set([...context.localFiles,...files])],library=all.filter(file=>/\.(cls|sty|def|cfg)$/i.test(file)),content=all.filter(file=>!library.includes(file));
+    return {...core.index([...library,...content],docs),...context};
+  });
+}
 function publish(filename){
   const filenameKey=core.key(filename),url=core.uri(filename),doc=docs.get(filenameKey);
   if(!doc&&!buildDiagnostics.has(filenameKey)&&!publishedDiagnostics.has(filenameKey))return;
@@ -329,7 +335,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.18'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.19'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

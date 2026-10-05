@@ -14,3 +14,5 @@ PDF recovery: node tests/recovery-probe.cjs checks retry decisions and a real Wi
 路径及模板导航：`node tests/paths-probe.cjs`、`node tests/navigation-probe.cjs`。后者默认使用隔离的临时项目；可设置 NUAA_PROJECT 为论文目录，执行不构建、不写源文件的调用处导航检查。
 
 诊断归属：`node tests/build-diagnostics-probe.cjs`；`workshop-probe.cjs` 还模拟两个主文件的外部构建日志，检查共享错误合并及独立清除。
+
+索引缓存：`node tests/source-cache-probe.cjs` 检查失效、局部解析和淘汰；输出隔离索引阶段的冷/热耗时，不代表 Zed 整体响应时间。

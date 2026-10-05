@@ -4,6 +4,7 @@ const path = require('node:path');
 const {pathToFileURL, fileURLToPath} = require('node:url');
 const TEX = /\.(tex|latex|cls|sty|def|dtx|ins)$/i;
 const SOURCE = /\.(tex|latex|cls|sty|def|dtx|ins|bib|bibtex|biblatex)$/i;
+const sourceCache=new (require('./source-cache.cjs').SourceCache)();
 const IGNORE = new Set(['.git','.dev','node_modules','build','target','.zed']);
 const DEFAULTS = {
   'latex.outDir': 'build',
@@ -83,7 +84,7 @@ function rootFile(active,folders,docs,explicit) {
 function position(source,offset) { const before=source.slice(0,offset).split('\n');return {line:before.length-1,character:before.at(-1).length}; }
 function offset(source,pos) { const lines=source.split('\n');return lines.slice(0,pos.line).reduce((n,line)=>n+line.length+1,0)+pos.character; }
 function range(source,start,end=start+1) { return {start:position(source,start),end:position(source,end)}; }
-function index(files,docs) {
+function uncachedIndex(files,docs) {
   const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),files:[]};
   for(const filename of files){
     let source;try{source=read(filename,docs);}catch{continue;}
@@ -104,6 +105,13 @@ function index(files,docs) {
   }
   return result;
 }
+function index(files,docs) {
+  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),files:[]};
+  for(const filename of files){let fragment;try{fragment=sourceCache.analyze(filename,docs,'index',text=>uncachedIndex([filename],new Map([[key(filename),{text}]])));}catch{continue;}
+    result.files.push(...fragment.files);for(const name of ['labels','citations','commands','environments'])for(const [label,entry] of fragment[name])result[name].set(label,entry);
+  }return result;
+}
+function cachedProject(files,docs,tag,build){return sourceCache.project(files,docs,tag,build);}
 function symbols(source) { return require('./structure.cjs').symbols(source,{mask,range}); }
 function diagnostic(message,source,start,severity=1) { return {source:'latex-workshop',message,severity,range:range(source,start,Math.min(start+1,source.length))}; }
 function syntaxDiagnostics(source,filename) {
@@ -153,4 +161,4 @@ function recipe(root,config,workspace,name,lastRecipe) {
   return {name:program || chosen.name,output:values.output,cwd:config['latex.build.fromFolder']?path.resolve(path.dirname(root),values.expand(config['latex.build.fromFolder'])):path.dirname(root),steps:tools.map(tool=>({cwd:tool.cwd?path.resolve(path.dirname(root),values.expand(tool.cwd)):undefined,command:values.expand(tool.command),args:(tool.args||[]).map(values.expand),env:Object.fromEntries(Object.entries(tool.env||{}).map(([k,v])=>[k,values.expand(v)]))}))};
 }
 function logDiagnostics(output,root,options) { return require('./tex-log.cjs').parse(output,root,options); }
-module.exports={workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};
+module.exports={cachedProject,workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};

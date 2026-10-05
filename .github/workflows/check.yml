@@ -45,3 +45,6 @@ jobs:
 
       - name: Check build diagnostic ownership
         run: node tests/build-diagnostics-probe.cjs
+
+      - name: Check source index caching
+        run: node tests/source-cache-probe.cjs
