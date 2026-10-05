@@ -168,15 +168,5 @@ function recipe(root,config,workspace,name,lastRecipe) {
   });
   return {name:program || chosen.name,output:values.output,cwd:config['latex.build.fromFolder']?path.resolve(path.dirname(root),values.expand(config['latex.build.fromFolder'])):path.dirname(root),steps:tools.map(tool=>({cwd:tool.cwd?path.resolve(path.dirname(root),values.expand(tool.cwd)):undefined,command:values.expand(tool.command),args:(tool.args||[]).map(values.expand),env:Object.fromEntries(Object.entries(tool.env||{}).map(([k,v])=>[k,values.expand(v)]))}))};
 }
-function logDiagnostics(output,root) {
-  const result=new Map();let fallback=0;
-  for(const line of output.split(/\r?\n/)){
-    const match=/^(.+?\.(?:tex|cls|sty|def|bib)):(\d+):\s*(.+)$/.exec(line);
-    if(match){const filename=path.resolve(path.dirname(root),match[1]);const severity=/warning/i.test(match[3])?2:1;const diagnostic={source:'latex-workshop',message:match[3],severity,range:{start:{line:Number(match[2])-1,character:0},end:{line:Number(match[2])-1,character:1}}};const url=uri(filename);if(!result.has(url))result.set(url,[]);result.get(url).push(diagnostic);continue;}
-    if(line.startsWith('! ')){const url=uri(root);if(!result.has(url))result.set(url,[]);result.get(url).push({source:'latex-workshop',message:line.slice(2),severity:1,range:{start:{line:fallback,character:0},end:{line:fallback,character:1}}});}
-    const warning=/^(?:LaTeX|Package \S+|Class \S+) Warning:\s*(.+?)(?: on input line (\d+)\.)?$/.exec(line);
-    if(warning){const url=uri(root);if(!result.has(url))result.set(url,[]);const lineNumber=Number(warning[2]||1)-1;result.get(url).push({source:'latex-workshop',message:warning[1],severity:2,range:{start:{line:lineNumber,character:0},end:{line:lineNumber,character:1}}});}
-  }
-  return result;
-}
+function logDiagnostics(output,root,options) { return require('./tex-log.cjs').parse(output,root,options); }
 module.exports={workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};

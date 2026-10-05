@@ -33,3 +33,5 @@ jobs:
         run: node tests/structure-probe.cjs
       - name: Check configuration reports
         run: node tests/config-check-probe.cjs
+      - name: Check TeX log locations
+        run: node tests/tex-log-probe.cjs

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.14
+
+- Track TeX source-file contexts and following l.N lines for traditional errors; join multi-line package warnings and resolve paths against the build working directory.
+- Select a uniquely identifiable control sequence from error context, otherwise highlight the reported source line; deduplicate repeated diagnostics.
+- Publish compile diagnostics for unopened source files and clear them after successful builds.
+- Avoid adding a generic main-file failure when an error is already attributed to a child file; retain the tool-failure fallback when no source error is available.
+- Verify exact child error locations and clearing after real XeLaTeX rebuilds, alongside static nested-file and wrapped-warning fixtures.
+
+
 ## 0.4.13
 
 - Make build, clean, stop and log CodeLens actions easier to recognize with Chinese labels, visual brackets and action glyphs.

@@ -156,7 +156,9 @@ function change(file,source,version){send({method:'textDocument/didChange',param
   console.log('PASS plugin cleanup/retry: disabled setting, cached failure, real PDF lock/unlock, incremental success and clean action');
 
   const broken=base+'\n\\DefinitelyUndefinedControlSequence';fs.writeFileSync(chapter,broken);change(chapter,broken,4);
-  const failure=await request('textDocument/build',{textDocument:{uri:core.uri(chapter)}});assert.equal(failure.status,1);assert((diagnostics.get(core.key(chapter))||[]).some(x=>/Undefined control sequence/i.test(x.message)),logs);
+  const failure=await request('textDocument/build',{textDocument:{uri:core.uri(chapter)}});assert.equal(failure.status,1);const sourceError=(diagnostics.get(core.key(chapter))||[]).find(x=>/Undefined control sequence/i.test(x.message));assert(sourceError,logs);const errorPosition=core.position(broken,broken.indexOf('\\DefinitelyUndefinedControlSequence'));assert.deepEqual(sourceError.range.start,errorPosition);assert(!(diagnostics.get(core.key(main))||[]).some(item=>item.severity===1),'Located child error duplicated on main');
+  const locationTools=cfg['latex.tools'];cfg['latex.tools']=locationTools.map(tool=>({...tool,args:(tool.args||[]).filter(arg=>arg!=='-file-line-error')}));send({method:'workspace/didChangeConfiguration',params:{settings:cfg}});
+  const traditionalFailure=await request('textDocument/build',{textDocument:{uri:core.uri(chapter)}});assert.equal(traditionalFailure.status,1);const traditionalIssue=(diagnostics.get(core.key(chapter))||[]).find(item=>/Undefined control sequence/.test(item.message));assert(traditionalIssue,'Traditional TeX error did not resolve child file');assert.deepEqual(traditionalIssue.range.start,errorPosition);assert(!(diagnostics.get(core.key(main))||[]).some(item=>item.severity===1));cfg['latex.tools']=locationTools;send({method:'workspace/didChangeConfiguration',params:{settings:cfg}});
   fs.writeFileSync(chapter,base+' Saved change.');change(chapter,base+' Saved change.',5);await request('textDocument/build',{textDocument:{uri:core.uri(chapter)}});assert(!(diagnostics.get(core.key(chapter))||[]).some(x=>/Undefined control sequence/i.test(x.message)));
   console.log('PASS diagnostics: compile error on child, cleared after successful rebuild');
   cfg['latex.autoBuild.run']='onSave';send({method:'workspace/didChangeConfiguration',params:{settings:cfg}});await pause(100);let before=fs.statSync(pdf).mtimeMs;
@@ -191,6 +193,12 @@ function change(file,source,version){send({method:'textDocument/didChange',param
  for(let i=0;i<30&&((diagnostics.get(core.key(chapter))||[]).some(d=>d.message.includes('External task failure')));i++)await pause(100);
  assert(!(diagnostics.get(core.key(chapter))||[]).some(d=>d.message.includes('External task failure')),'Successful external build did not clear diagnostics');
  if(process.env.SKIP_TEX_BUILD)assert.equal(logs.split('Building '+main+' with').length,beforeExternalBuilds,'Output changes unexpectedly triggered compilation');
+ const unopened=path.join(root,'unopened.tex');fs.writeFileSync(unopened,'Title\n\\ClosedFileError');
+ fs.writeFileSync(externalLog,'('+main+'\n('+unopened+'\n! Undefined control sequence.\nl.2 \\ClosedFileError\n)\n)\nNo pages of output.\n');
+ for(let i=0;i<30&&!((diagnostics.get(core.key(unopened))||[]).some(d=>d.message.includes('Undefined control sequence')));i++)await pause(100);
+ const closedIssue=(diagnostics.get(core.key(unopened))||[]).find(d=>d.message.includes('Undefined control sequence'));assert(closedIssue,'Unopened source diagnostic was not published');assert.equal(closedIssue.range.start.line,1);assert.equal(closedIssue.range.start.character,0);
+ fs.writeFileSync(externalLog,'Output written on build/main.xdv (1 page).\n');for(let i=0;i<30&&((diagnostics.get(core.key(unopened))||[]).some(d=>d.severity===1));i++)await pause(100);assert.deepEqual(diagnostics.get(core.key(unopened)),[],'Unopened source diagnostic not cleared');fs.unlinkSync(unopened);
+ console.log('PASS unopened-file diagnostics: traditional external TeX error location published and cleared without opening the child');
  console.log('PASS external task diagnostics: new errors imported, incomplete logs ignored, successful log clears stale errors with auto-build disabled');
  console.log('PASS missing formatter reports dependency; bst excluded');
  await request('shutdown',{});send({method:'exit'});clearTimeout(timeout);
