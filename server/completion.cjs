@@ -1,8 +1,9 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const core=require('./core.cjs'),resolver=require('./paths.cjs');
-const FILE_COMMANDS=new Set(['input','include','subfile','InputIfFileExists','includegraphics','bibliography','bibliographystyle','addbibresource',...resolver.IMPORTS]);
-function context(source,pos){
+const FILE_COMMANDS=new Set(['input','include','subfile','InputIfFileExists','includegraphics','bibliography','bibliographystyle','addbibresource','CatchFileDef',...resolver.IMPORTS]);
+function context(source,pos,registry=new Map()){
+ const wrapped=require('./wrappers.cjs').context(source,pos,registry);if(wrapped)return wrapped;
  const end=core.offset(source,pos),before=core.mask(source).slice(0,end);
  const imported=/\\(import|subimport|inputfrom|subinputfrom|includefrom|subincludefrom)\*?\s*\{([^{}]*)\}\s*\{([^{}]*)$/.exec(before);
  const match=imported?[imported[0],imported[1],imported[3]]:/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\s*\{([^{}]*)$/.exec(before);if(!match)return null;
@@ -29,7 +30,7 @@ function paths(active,root,command,prefix,docs,context={}){
 }
 function pathDefinition(source,pos,active,root,docs){
  const end=core.offset(source,pos);
- for(const ref of resolver.references(source)){
+ for(const ref of resolver.references(source,resolver.graph(root,docs).wrappers)){
   if(end<ref.argument.start||end>ref.argument.end)continue;
   let cursor=ref.argument.start;const parts=/^(bibliography|usepackage|RequirePackage)$/.test(ref.command)?ref.argument.value.split(','):[ref.argument.value];
   for(const part of parts){const name=part.trim(),offset=cursor+part.indexOf(name);cursor+=part.length+1;if(end<offset||end>offset+name.length)continue;

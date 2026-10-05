@@ -205,16 +205,17 @@ async function completions(url,pos){
     const editRange=core.range(source,end-prefix.length,optionEnd);
     return values.filter(value=>packageData.plain(value).toLowerCase().startsWith(prefix.toLowerCase())).map(value=>({label:packageData.plain(value),kind:10,detail:options[1]+' option',sortText:packageData.plain(value).toLowerCase(),textEdit:{range:editRange,newText:snippets?packageData.cleanSnippet(value):value.split('=')[0]+(value.includes('=')?'=':'')},...(snippets?{insertTextFormat:2}:{})}));
   }
-  const pathContext=completion.context(source,pos);
+  let completionRoot;try{completionRoot=resolveRoot(filename);}catch{completionRoot=filename;}
+  const pathContext=completion.context(source,pos,require('./paths.cjs').graph(completionRoot,docs).wrappers);
   const match=pathContext?[null,pathContext.command,pathContext.prefix]:null;
   if(match){
-    const command=match[1],prefix=match[2].split(',').at(-1).trimStart();let entries=[];
+    const command=match[1],prefix=(command==='CatchFileDef'?match[2]:match[2].split(',').at(-1)).trimStart();let entries=[];
     if(completion.FILE_COMMANDS.has(command)){let root;try{root=resolveRoot(filename);}catch{root=filename;}entries=completion.paths(filename,root,command,prefix,docs,pathContext);}
     else if(command==='usepackage'||command==='RequirePackage'||command==='documentclass'){const names=await installedTexNames();const extension=command==='documentclass'?'.cls':'.sty';const local=folders.flatMap(folder=>core.scan(folder)).filter(file=>file.endsWith(extension)).map(file=>path.basename(file,extension));entries=[...new Set([...(command==='documentclass'?names.classes:names.packages),...local])].map(label=>({label,kind:9,detail:extension.slice(1)+' available locally'}));}
     else if(/^(?:[a-zA-Z]*cite[a-zA-Z]*|nocite)$/.test(command))entries=[...idx.citations].map(([label,data])=>({label,kind:18,detail:data.detail}));
     else if(/^(?:ref|eqref|pageref|autoref|cref|Cref|vref)$/.test(command))entries=[...idx.labels].map(([label])=>({label,kind:18}));
-    else if(command==='begin'||command==='end')entries=[...new Set([...ENVS.filter(name=>!packageData.REQUIRED_ENVS[name]||idx.packages.has(packageData.REQUIRED_ENVS[name])),...idx.packageEnvironments.keys(),...idx.environments.keys()])].map(label=>({label,kind:13,detail:idx.packageEnvironments.has(label)?'宏包：'+idx.packageEnvironments.get(label).package:undefined}));
-    const context=completion.context(source,pos),editRange=core.range(source,context.start,context.end);
+    else if(command==='begin'||command==='end')entries=[...new Set([...ENVS.filter(name=>!packageData.REQUIRED_ENVS[name]||idx.packages.has(packageData.REQUIRED_ENVS[name])),...idx.packageEnvironments.keys(),...idx.environments.keys()])].map(label=>({label,kind:13,detail:idx.environments.get(label)?.detail||(idx.packageEnvironments.has(label)?'宏包：'+idx.packageEnvironments.get(label).package:undefined)}));
+    const context=pathContext,editRange=core.range(source,context.start,context.end);
     return entries.filter(item=>item.label.toLowerCase().startsWith(prefix.toLowerCase())).map(({target,...item})=>({...item,textEdit:{range:editRange,newText:item.label}}));
   }
   const prefix=/\\([A-Za-z@_:]*\*?)$/.exec(before)?.[1];if(prefix===undefined)return [];
@@ -341,7 +342,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.20'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.21'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

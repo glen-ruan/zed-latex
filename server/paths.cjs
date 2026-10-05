@@ -8,16 +8,17 @@ function group(text,start,open='{',close='}'){
 }
 function literal(value){return value.trim().replace(/^"(.*)"$/,'$1');}
 function staticPath(value){return !/[\\#$%{}]/.test(value);}
-function references(source){
+function references(source,registry=new Map()){
  const core=require('./core.cjs'),clean=core.mask(source),result=[],tokens=/\\([A-Za-z]+)\*?/g;let match;
  while((match=tokens.exec(clean))){
   let preceding=0;for(let i=match.index-1;i>=0&&clean[i]==='\\';i--)preceding++;if(preceding%2)continue;
   const modern=require('./document-commands.cjs').definition(clean,match.index);if(modern){tokens.lastIndex=modern.end;continue;}
+  const legacy=require('./declarations.cjs').legacyEnd(clean,match[1],tokens.lastIndex);if(legacy){tokens.lastIndex=legacy;continue;}
   const command=match[1].replace(/^(RequirePackage|LoadClass)WithOptions$/,'$1');if(!COMMANDS.has(command)&&command!=='graphicspath')continue;
   let cursor=tokens.lastIndex,option;while((option=group(clean,cursor,'[',']')))cursor=option.next;
   const first=group(clean,cursor);if(!first)continue;const second=IMPORTS.has(command)?group(clean,first.next):null;if(IMPORTS.has(command)&&!second)continue;
   result.push({command,start:match.index,directory:second?first:null,argument:second||first});tokens.lastIndex=(second||first).next;
- }return result;
+ }return result.concat(require('./wrappers.cjs').references(source,registry)).sort((a,b)=>a.start-b.start);
 }
 function extensions(command){return command==='includegraphics'?['','.pdf','.png','.jpg','.jpeg','.eps','.bmp']:command==='bibliographystyle'?['','.bst']:command==='usepackage'||command==='RequirePackage'?['','.sty']:command==='documentclass'||command==='LoadClass'?['','.cls']:/bibliography|addbibresource/.test(command)?['','.bib','.bibtex','.biblatex']:['','.tex','.latex'];}
 function unique(items){const core=require('./core.cjs');return [...new Map(items.map(item=>[core.key(item),item])).values()];}
@@ -34,13 +35,13 @@ function candidates(name,command,search,docs){
 }
 function graphics(value,root){const found=[];let cursor=0,item;while((item=group(value,cursor))){const name=literal(item.value);if(staticPath(name))found.push(path.resolve(path.dirname(root),name));cursor=item.next;}return unique(found);}
 function graph(root,docs){
- const core=require('./core.cjs'),files=new Set(),contexts=new Map(),seen=new Set();
+ const core=require('./core.cjs'),files=new Set(),contexts=new Map(),seen=new Set(),registry=new Map();
  function visit(filename,state,depth){
   if(depth>25||seen.size>=5000)return;const id=JSON.stringify([core.key(filename),state.importDir,(state.graphics||[]).map(core.key)]);if(seen.has(id))return;seen.add(id);
-  let source;try{source=core.read(filename,docs);}catch{return;}files.add(core.key(filename));
+  let source;try{source=core.read(filename,docs);}catch{return;}files.add(core.key(filename));for(const model of require('./wrappers.cjs').definitions(source))registry.set(model.name,model);
   const timeline=[{start:0,...state}],list=contexts.get(core.key(filename))||[];list.push(timeline);contexts.set(core.key(filename),list);
   let current={...state};
-  for(const ref of references(source)){
+  for(const ref of references(source,registry)){
    if(ref.command==='graphicspath'){current={...current,graphics:graphics(ref.argument.value,root)};timeline.push({start:ref.argument.next,...current});continue;}
    if(ref.command==='includegraphics'||ref.command==='bibliographystyle')continue;
    const search=bases(filename,root,ref.command,current,ref.directory?.value),names=/^(bibliography|usepackage|RequirePackage)$/.test(ref.command)?ref.argument.value.split(','):[ref.argument.value];
@@ -49,7 +50,8 @@ function graph(root,docs){
    }
   }
  }
- visit(root,{graphics:[]},0);return {files,contexts};
+ // Repeat when new modules expose wrappers used in files visited earlier.
+ for(let pass=0;pass<25;pass++){const stamp=JSON.stringify([...registry]);seen.clear();contexts.clear();visit(root,{graphics:[]},0);if(stamp===JSON.stringify([...registry]))break;}return {files,contexts,wrappers:registry};
 }
 function states(active,root,docs,offset=Infinity){
  const timelines=graph(root,docs).contexts.get(require('./core.cjs').key(active));
