@@ -120,19 +120,7 @@ function index(files,docs) {
   }
   return result;
 }
-function symbols(source) {
-  const result=[];const levels=['part','chapter','section','subsection','subsubsection','paragraph','subparagraph'];
-  for(const match of mask(source).matchAll(/\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?(?:\[[^\]]*\])?\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g))result.push({name:match[2],kind:2,range:range(source,match.index,match.index+match[0].length),selectionRange:range(source,match.index,match.index+match[0].length),level:levels.indexOf(match[1]),children:[]});
-  const roots=[],stack=[];
-  for(let i=0;i<result.length;i++){
-    const item=result[i];let next=i+1;while(next<result.length && result[next].level>item.level)next++;
-    item.range.end=position(source,next<result.length?offset(source,result[next].range.start):source.length);
-    while(stack.length && stack.at(-1).level>=item.level)stack.pop();
-    (stack.at(-1)?.children || roots).push(item);stack.push(item);
-  }
-  function strip(items){for(const item of items){delete item.level;strip(item.children);}return items;}
-  return strip(roots);
-}
+function symbols(source) { return require('./structure.cjs').symbols(source,{mask,range}); }
 function diagnostic(message,source,start,severity=1) { return {source:'latex-workshop',message,severity,range:range(source,start,Math.min(start+1,source.length))}; }
 function syntaxDiagnostics(source,filename) {
   if(!/\.(tex|latex)$/i.test(filename))return [];

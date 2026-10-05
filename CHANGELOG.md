@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.11
+
+- Extend Zed native outline queries with floats, captions, mathematical environments and label keys.
+- Add hierarchical LSP symbols and cross-file workspace search for captions, equations and labels, including unsaved buffers and precise selection ranges.
+- Prefer optional short titles; ignore comments, verbatim examples and macro definition bodies in LSP structure. Recover unclosed environments at following sections.
+- Keep native outline and LSP responsibilities explicit; no merged cross-file outline tree or rendered counter evaluation.
+
+
 ## 0.4.10
 
 - Bundle 32 Workshop package/dependency metadata files from fixed upstream revision c5bdf430a1577e2df28139ed4b1bd5c9ad859865 with the MIT license.

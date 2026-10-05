@@ -6,7 +6,7 @@
 
 | 功能 | 实现 |
 | --- | --- |
-| 语法、高亮、折叠、缩进、结构导航 | Tree-sitter 查询，含 expl3、`@` 命令、数学下标；LSP 提供章节层级 |
+| 语法、高亮、折叠、缩进、结构导航 | Tree-sitter 查询，含 expl3、`@` 命令、数学下标；章节、公式、图表标题和标签的大纲；LSP 提供层级符号及跨文件搜索 |
 | 代码片段 | `env/sec/subsec/fig/eq/itemize/cite/ref/input`，环境名共享占位符 |
 | 补全和定义跳转 | 项目标签、BibTeX 引用、自定义命令和环境，常用命令、环境与输入文件 |
 | 查找引用、重命名 | 项目内标签和 BibTeX 引用键，通过标准 LSP 编辑返回修改 |
@@ -145,7 +145,7 @@ F4 中直接执行 latexmk 的原生任务仍是独立入口，不会经过插�
 
 路径补全支持 input/include/subfile、includegraphics、bibliography/addbibresource，包含目录及相应文件类型。查找主文件目录和当前文件目录，替换当前参数中的路径片段；逗号分隔引用或包名只替换当前项。路径跳转支持上述文件命令。当前不展开宏生成的路径、graphicspath 或复杂 import 路径上下文。
 
-usepackage/RequirePackage 与 documentclass 补全读取本机 kpsewhich 返回的 TEXMFDIST 文件名数据库，并包含项目中的 sty/cls 文件。数据库按工具路径缓存，新增安装的包需要重启服务刷新；没有 kpsewhich 或 ls-R 时仍可补全项目本地包，不宣称覆盖所有发行版。命令补全为支持 snippets 的编辑器提供 frac、sqrt、文字样式、章节和环境等参数片段。工作区符号搜索支持跨文件章节标题，结果附带来源文件。
+usepackage/RequirePackage 与 documentclass 补全读取本机 kpsewhich 返回的 TEXMFDIST 文件名数据库，并包含项目中的 sty/cls 文件。数据库按工具路径缓存，新增安装的包需要重启服务刷新；没有 kpsewhich 或 ls-R 时仍可补全项目本地包，不宣称覆盖所有发行版。命令补全为支持 snippets 的编辑器提供 frac、sqrt、文字样式、章节和环境等参数片段。工作区符号搜索支持跨文件章节标题、公式环境、图表标题和标签键，结果附带来源文件。
 
 通过代码操作 **Check LaTeX tools** 检查当前配方工具、可识别的 latexmk 引擎、启用的格式化器，以及清理工具和包目录工具。报告保存为输出目录中的 `<主文件名>.latex-workshop-tools.log`；支持 showDocument 的客户端会打开报告。检查只查找程序，不执行编译、不安装依赖、不改写设置；实际工具运行和 TeX 包依赖仍由构建验证。
 
@@ -171,3 +171,12 @@ newcommand、renewcommand、providecommand、DeclareRobustCommand 风格的项�
 例如加载 mathtools 后输入 dfr，可补全其 amsmath 依赖提供的 dfrac，并查看分子/分母参数；删除加载语句后，此类宏包命令不再出现在建议中。实际键绑定以编辑器配置为准。
 
 这是静态索引，不执行 TeX 条件分支或展开宏生成的包名。未收录的宏包、未提供元数据的依赖、外部文档类的隐式加载、复杂包选项和键值语法不保证完整支持。数据中的少见/内部命令默认不加入补全；不能把此版本视为完整 Workshop 补全兼容。
+
+## 0.4.11 结构导航
+
+- Zed 原生大纲查询增加 figure/table（含子图表）、常用公式环境、caption 和 label；标题优先使用可选短标题。
+- LSP 文档符号保留章节层级，将图表、公式及标签归入所属结构。项目符号搜索可按图表标题或标签键跨文件定位，读取尚未保存的编辑内容。
+- 标签定位范围是键本身，图表定位到标题；评论、verbatim 和命令定义正文不计入 LSP 文档结构。未闭合环境在后续章节处恢复。
+- 按 Zed 标准 outline.scm 捕获方式实现原生大纲，不依赖编辑器是否采用 LSP documentSymbol。两种大纲的条目和层级可能不同；目前不合并跨文件 outline 树，也不推算 PDF 中的章节/图表编号。静态扫描不能执行条件分支或动态宏。
+
+更新后，在当前文件的大纲中查找 caption 或 label；跨文件使用命令面板的项目符号搜索，输入标签键或图表标题即可定位。原生大纲和项目符号搜索是不同入口。

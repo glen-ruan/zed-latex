@@ -42,6 +42,8 @@ impl zed::Extension for LatexExtension {
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("package-data.cjs"), include_str!("../server/package-data.cjs"))
             .map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("structure.cjs"), include_str!("../server/structure.cjs"))
+            .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("core.cjs"), include_str!("../server/core.cjs"))
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("tools.cjs"), include_str!("../server/tools.cjs"))

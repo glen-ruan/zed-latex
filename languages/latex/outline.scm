@@ -69,3 +69,17 @@
 (new_command_definition command: _ @context declaration: _ @name) @item
 (old_command_definition command: _ @context declaration: _ @name) @item
 (environment_definition command: _ @context name: _ @name) @item
+
+; Named floats and mathematical environments provide enclosing outline items.
+((generic_environment
+  begin: (begin name: (_) @name)) @item
+  (#match? @name "^\\{(figure|table|subfigure|subtable|equation|align|alignat|flalign|gather|multline|eqnarray|displaymath|subequations)\\*?\\}$"))
+
+((math_environment
+  begin: (begin name: (_) @name)) @item
+  (#match? @name "^\\{(equation|align|alignat|flalign|gather|multline|eqnarray|displaymath|subequations)\\*?\\}$"))
+
+; Captions and keys remain separately searchable, including nested floats.
+(caption command: _ @context !short long: _ @name) @item
+(caption command: _ @context short: _ @name) @item
+(label_definition command: _ @context name: _ @name) @item

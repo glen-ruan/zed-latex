@@ -29,3 +29,5 @@ jobs:
         run: node tests/tools-probe.cjs
       - name: Check reference edits
         run: node tests/references-probe.cjs
+      - name: Check source structure
+        run: node tests/structure-probe.cjs
