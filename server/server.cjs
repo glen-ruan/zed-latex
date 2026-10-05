@@ -8,10 +8,13 @@ const recovery=require('./build-retry.cjs');
 const report=require('./build-report.cjs');
 const tools=require('./tools.cjs');
 const references=require('./references.cjs');
+const completion=require('./completion.cjs');
+const texCatalog=new Map();
 const logSync=new (require('./log-sync.cjs').LogSync)();
 const diagnosticFiles=new Map();
 const docs=new Map(), jobs=new Map(), buildDiagnostics=new Map(), timers=new Map(), lastRecipes=new Map();
-const buildLogs=new Map();
+const buildLogs=new Map(), buildStates=new Map();
+let clientCapabilities={}, progressSerial=0;
 let folders=[], config=core.settings(), input=Buffer.alloc(0), requestId=0, shutdown=false;
 const pending=new Map(), observed=new Map();
 const COMMANDS=['documentclass','usepackage','input','include','begin','end','section','subsection','subsubsection','chapter','part','paragraph','label','ref','eqref','pageref','autoref','cref','cite','citep','citet','textcite','parencite','bibliography','bibliographystyle','addbibresource','printbibliography','caption','includegraphics','centering','item','textbf','textit','emph','footnote','newcommand','renewcommand','newenvironment','frac','sqrt','sum','prod','int','alpha','beta','gamma','delta','epsilon','theta','lambda','mu','pi','sigma','phi','omega','left','right','mathrm','mathbf','mathbb','operatorname','ExplSyntaxOn','ExplSyntaxOff'];
@@ -19,7 +22,15 @@ const ENVS=['document','figure','table','itemize','enumerate','description','equ
 function send(message){const body=Buffer.from(JSON.stringify({jsonrpc:'2.0',...message}));process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`);process.stdout.write(body);}
 function notify(method,params){send({method,params});}
 function show(message,type=1){notify('window/showMessage',{type,message});}
-function request(method,params){return new Promise((resolve,reject)=>{const id=++requestId;pending.set(id,{resolve,reject});send({id,method,params});});}
+function request(method,params,timeoutMs=0){return new Promise((resolve,reject)=>{const id=++requestId;const timer=timeoutMs?setTimeout(()=>{pending.delete(id);reject(Error(method+' timed out'));},timeoutMs).unref():null;pending.set(id,{resolve,reject,timer});send({id,method,params});});}
+function refreshLenses(){if(clientCapabilities.workspace?.codeLens?.refreshSupport)request('workspace/codeLens/refresh',{},1500).catch(()=>{});}
+async function beginProgress(job,root,recipe){
+  if(!clientCapabilities.window?.workDoneProgress)return;
+  const token='latex-build-'+(++progressSerial);job.progress=token;
+  try{await request('window/workDoneProgress/create',{token},1500);job.progressStarted=true;notify('$/progress',{token,value:{kind:'begin',title:'LaTeX: '+path.basename(root),message:recipe,cancellable:true}});}catch{job.progress=null;}
+}
+function stepProgress(job,message){if(job.progressStarted)notify('$/progress',{token:job.progress,value:{kind:'report',message,cancellable:true}});}
+function endProgress(job,message){if(job.progressStarted){notify('$/progress',{token:job.progress,value:{kind:'end',message}});job.progressStarted=false;}}
 function document(url){return docs.get(core.key(core.file(url)));}
 function text(url){return document(url)?.text || core.read(core.file(url),docs);}
 function projectSettings(){
@@ -47,9 +58,10 @@ function run(command,args,options={}){
     const launch=tools.launch(command,{overrides:options.env,directories:(options.config||config)['latex.tools.searchPaths'],cwd:options.cwd});
     const child=spawn(launch.command,args,{cwd:options.cwd,env:launch.env,windowsHide:true});
     options.started?.(child);let output='',errors='',transcript='';
+    const timeout=options.timeoutMs?setTimeout(()=>child.kill(),options.timeoutMs).unref():null;
     child.stdout.on('data',chunk=>{output+=chunk;transcript+=chunk;options.capture?.(chunk.toString());if(options.log)notify('window/logMessage',{type:4,message:chunk.toString()});});
     child.stderr.on('data',chunk=>{errors+=chunk;transcript+=chunk;options.capture?.(chunk.toString());if(options.log)notify('window/logMessage',{type:4,message:chunk.toString()});});
-    child.on('error',reject);child.on('close',(code,signal)=>resolve({code,signal,output,errors,transcript}));
+    child.on('error',error=>{clearTimeout(timeout);reject(error);});child.on('close',(code,signal)=>{clearTimeout(timeout);resolve({code,signal,output,errors,transcript});});
     if(options.input!==undefined)child.stdin.end(options.input);else child.stdin.end();
   });
 }
@@ -84,7 +96,7 @@ async function cleanProject(active){
   })().finally(()=>jobs.delete(rootKey));
   jobs.set(rootKey,job);return job.promise;
 }
-async function build(active,recipeName){
+async function build(active,recipeName,manual=true){
   const config=globalConfig();
   if(!core.SOURCE.test(active))throw new Error('This language is not a LaTeX build target');
   const root=resolveRoot(active),rootKey=core.key(root);
@@ -93,20 +105,23 @@ async function build(active,recipeName){
   for(const filename of core.dependencies(root,docs)){const doc=docs.get(core.key(filename));if(doc&&doc.text.replace(/\r\n/g,'\n')!==doc.savedText.replace(/\r\n/g,'\n')&&doc.text.replace(/\r\n/g,'\n')!==fs.readFileSync(filename,'utf8').replace(/\r\n/g,'\n'))throw Error('Save changes before building: '+filename);}
   const recipe=core.recipe(root,config,folders.find(folder=>root.startsWith(folder)),recipeName,lastRecipes.get(rootKey));
   fs.mkdirSync(recipe.output,{recursive:true});
-  const job={process:null,cancelled:false,config,log:[],kind:'build',recipe:recipe.name};
+  const job={process:null,cancelled:false,config,log:[],kind:'build',recipe:recipe.name,startedAt:Date.now()};
+  buildStates.set(rootKey,{running:true,recipe:recipe.name});refreshLenses();
   job.promise=(async()=>{
     let status=0,combined='',failure='';
+    await beginProgress(job,root,recipe.name);if(manual)show('Compiling '+path.basename(root)+' — '+recipe.name,3);
     const logPath=report.logfile(root,recipe.output);buildLogs.set(rootKey,logPath);job.log.push(new Date().toISOString(),`Building ${root} with ${recipe.name}`);
     notify('window/logMessage',{type:3,message:`Building ${root} with ${recipe.name}`});
     for(const step of recipe.steps){
       if(job.cancelled){status=3;break;}
       job.log.push('Command: '+step.command+' '+JSON.stringify(step.args),'Working directory: '+(step.cwd||recipe.cwd));
+      stepProgress(job,step.command);
       let result;try{
         result=await recovery.retryStep({
           execute:()=>run(step.command,step.args,{cwd:step.cwd||recipe.cwd,env:step.env,config,log:true,capture:chunk=>job.log.push(chunk),started:child=>job.process=child}),
           clean:()=>cleanFiles(root,job,step),enabled:config['latex.autoBuild.cleanAndRetry.enabled']===true,
           pdf:path.join(recipe.output,(config['latex.jobname']||path.basename(root,path.extname(root)))+'.pdf'),
-          cancelled:()=>job.cancelled,report:message=>{job.log.push(message);show(message,2);}
+          cancelled:()=>job.cancelled,report:message=>{job.log.push(message);stepProgress(job,message);show(message,2);}
         });
       }
       catch(error){failure=`Cannot run ${step.command}: ${error.message}`;job.log.push(failure);status=2;break;}
@@ -119,11 +134,16 @@ async function build(active,recipeName){
     let log;try{if(status===2 || status===3)throw new Error('Build did not produce a log');log=fs.readFileSync(path.join(recipe.output,stem+'.log'),'utf8');}catch{log=combined;}
     updateBuildDiagnostics(root,log);lastRecipes.set(rootKey,recipe.name);
     if(failure){const values=buildDiagnostics.get(rootKey)||[];if(!values.some(item=>item.severity===1)){values.push({source:'latex-workshop',message:failure,severity:1,range:{start:{line:0,character:0},end:{line:0,character:1}}});buildDiagnostics.set(rootKey,values);const files=diagnosticFiles.get(rootKey)||new Set();files.add(rootKey);diagnosticFiles.set(rootKey,files);refresh();}}
-    job.log.push('Build finished with status '+status,failure);
+    const elapsedMs=Date.now()-job.startedAt,elapsed=(elapsedMs/1000).toFixed(1)+'s';
+    const outcome=status===0?'Succeeded':status===3?'Cancelled':'Failed';
+    const summary=outcome+' — '+recipe.name+' — '+elapsed;
+    buildStates.set(rootKey,{running:false,recipe:recipe.name,summary,status,elapsedMs});endProgress(job,summary);refreshLenses();
+    job.log.push('Build finished with status '+status,summary,failure);
+    if(manual&&(status===0||status===3))show('LaTeX '+summary+'\nBuild log: '+logPath,3);
     try{report.save(logPath,job.log);}catch(error){show('Cannot save build log: '+error.message,2);}
     if(status!==0 && status!==3)show('LaTeX build failed ('+recipe.name+'): '+failure+'\nBuild log: '+logPath);
-    return {status,root:core.uri(root),recipe:recipe.name,log:core.uri(logPath),...(failure?{message:failure}:{})};
-  })().finally(()=>jobs.delete(rootKey));
+    return {status,elapsedMs,root:core.uri(root),recipe:recipe.name,log:core.uri(logPath),...(failure?{message:failure}:{})};
+  })().catch(error=>{buildStates.set(rootKey,{running:false,recipe:recipe.name,summary:'Failed — '+error.message,status:2});throw error;}).finally(()=>{endProgress(job,'Compilation ended');jobs.delete(rootKey);refreshLenses();});
   jobs.set(rootKey,job);return job.promise;
 }
 function terminate(job){
@@ -138,29 +158,36 @@ function schedule(active){
   timers.set(rootKey,setTimeout(async()=>{
     timers.delete(rootKey);
     if(jobs.has(rootKey)){await jobs.get(rootKey).promise;schedule(active);return;}
-    try{await build(active);}catch(error){show(error.message);}
+    try{await build(active,undefined,false);}catch(error){show(error.message);}
   },Math.max(100,Number(config['latex.autoBuild.interval'])||1000)));
 }
-function completions(url,pos){
+async function installedTexNames(){
+  const directories=[...config['latex.tools.searchPaths'],...config['latex.tools'].filter(tool=>path.isAbsolute(tool.command)).map(tool=>path.dirname(tool.command))];
+  const key=JSON.stringify(directories),catalogConfig={...config,'latex.tools.searchPaths':directories};if(texCatalog.has(key))return texCatalog.get(key);
+  const result=(async()=>{try{const processResult=await run('kpsewhich',['--var-value=TEXMFDIST'],{cwd:folders[0],config:catalogConfig,timeoutMs:3000});if(processResult.code!==0)return {packages:[],classes:[]};const directory=processResult.output.trim();if(!directory)return {packages:[],classes:[]};return completion.parseDatabase(await fs.promises.readFile(path.join(directory,'ls-R'),'utf8'));}catch{return {packages:[],classes:[]};}})();texCatalog.set(key,result);return result;
+}
+async function completions(url,pos){
   const source=text(url),end=core.offset(source,pos),before=core.mask(source.slice(0,end)),filename=core.file(url),idx=projectIndex(filename);
-  const match=/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\{([^{}]*)$/.exec(before);
+  const match=/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\s*\{([^{}]*)$/.exec(before);
   if(match){
-    const command=match[1],prefix=match[2].split(',').at(-1).trim();let entries=[];
-    if(/^(?:[a-zA-Z]*cite[a-zA-Z]*|nocite)$/.test(command))entries=[...idx.citations].map(([label,data])=>({label,kind:18,detail:data.detail}));
+    const command=match[1],prefix=match[2].split(',').at(-1).trimStart();let entries=[];
+    if(completion.FILE_COMMANDS.has(command)){let root;try{root=resolveRoot(filename);}catch{root=filename;}entries=completion.paths(filename,root,command,prefix);}
+    else if(command==='usepackage'||command==='RequirePackage'||command==='documentclass'){const names=await installedTexNames();const extension=command==='documentclass'?'.cls':'.sty';const local=folders.flatMap(folder=>core.scan(folder)).filter(file=>file.endsWith(extension)).map(file=>path.basename(file,extension));entries=[...new Set([...(command==='documentclass'?names.classes:names.packages),...local])].map(label=>({label,kind:9,detail:extension.slice(1)+' available locally'}));}
+    else if(/^(?:[a-zA-Z]*cite[a-zA-Z]*|nocite)$/.test(command))entries=[...idx.citations].map(([label,data])=>({label,kind:18,detail:data.detail}));
     else if(/^(?:ref|eqref|pageref|autoref|cref|Cref|vref)$/.test(command))entries=[...idx.labels].map(([label])=>({label,kind:18}));
     else if(command==='begin'||command==='end')entries=[...new Set([...ENVS,...idx.environments.keys()])].map(label=>({label,kind:13}));
-    else if(/^(?:input|include|subfile|includegraphics)$/.test(command))entries=idx.files.filter(file=>file!==filename).map(file=>({label:path.relative(path.dirname(filename),file).replace(/\\/g,'/').replace(/\.tex$/i,''),kind:17}));
-    return entries.filter(item=>item.label.toLowerCase().startsWith(prefix.toLowerCase())).map(item=>({...item,insertText:item.label}));
+    const context=completion.context(source,pos),editRange=core.range(source,context.start,context.end);
+    return entries.filter(item=>item.label.toLowerCase().startsWith(prefix.toLowerCase())).map(({target,...item})=>({...item,textEdit:{range:editRange,newText:item.label}}));
   }
   const prefix=/\\([A-Za-z@_:]*)$/.exec(before)?.[1];if(prefix===undefined)return [];
-  return [...new Set([...COMMANDS,...idx.commands.keys()])].filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase())).map(name=>({label:'\\'+name,kind:3,insertText:name}));
+  return [...new Set([...COMMANDS,...idx.commands.keys()])].filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase())).map(name=>{const snippet=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport&&completion.snippets(name);return {label:'\\'+name,kind:3,insertText:snippet?snippet[0]:name,...(snippet?{insertTextFormat:2,detail:snippet[1]}:{})};});
 }
 function symbolAt(url,pos){
   const source=text(url),end=core.offset(source,pos),before=source.slice(0,end),after=source.slice(end);
   const left=/[^{}\s,\\]*$/.exec(before)[0],right=/^[^{}\s,\\]*/.exec(after)[0];
   return left+right;
 }
-function definition(url,pos){const idx=projectIndex(core.file(url)),name=symbolAt(url,pos);const entry=idx.labels.get(name)||idx.citations.get(name)||idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];}
+function definition(url,pos){let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root);if(files.length)return files;const idx=projectIndex(core.file(url)),name=symbolAt(url,pos);const entry=idx.labels.get(name)||idx.citations.get(name)||idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];}
 function bibFormat(source,spaces){
   // Preserve comments, braced/quoted values and string expressions verbatim.
   let result='',cursor=0;
@@ -200,16 +227,43 @@ function actions(url){
   const filename=core.file(url);if(!core.TEX.test(filename))return [];
   const result=[{title:'Build LaTeX project',kind:'source',command:{title:'Build LaTeX project',command:'latex-workshop.build',arguments:[url]}}];
   result.push({title:'Clean LaTeX project',kind:'source',command:{title:'Clean LaTeX project',command:'latex-workshop.clean',arguments:[url]}});
+  result.push({title:'Check LaTeX tools',kind:'source',command:{title:'Check LaTeX tools',command:'latex-workshop.checkTools',arguments:[url]}});
   result.push({title:'Show LaTeX build log',kind:'source',command:{title:'Show LaTeX build log',command:'latex-workshop.showLog',arguments:[url]}});
   for(const recipe of config['latex.recipes'])result.push({title:'Build with recipe: '+recipe.name,kind:'source',command:{title:recipe.name,command:'latex-workshop.recipes',arguments:[url,recipe.name]}});
-  if(jobs.size)result.push({title:'Terminate LaTeX compilation',kind:'source',command:{title:'Terminate compilation',command:'latex-workshop.kill'}});
+  if(jobs.size)result.push({title:'Terminate LaTeX compilation',kind:'source',command:{title:'Terminate compilation',command:'latex-workshop.kill',arguments:[url]}});
   return result;
 }
 function lenses(url){
   if(!core.TEX.test(core.file(url)))return [];
   const source=text(url),match=/\\documentclass\b/.exec(core.mask(source));
   const position=core.position(source,match?.index||0),range={start:position,end:position};
-  return [{range,command:{title:'Build LaTeX project',command:'latex-workshop.build',arguments:[url]}},{range,command:{title:'Clean LaTeX project',command:'latex-workshop.clean',arguments:[url]}}];
+  let state;try{state=buildStates.get(core.key(resolveRoot(core.file(url))));}catch{}
+  const result=[{range,command:{title:state?.running?'Compiling '+state.recipe+' (Stop)':state?.summary?'Build LaTeX project — '+state.summary:'Build LaTeX project',command:state?.running?'latex-workshop.kill':'latex-workshop.build',arguments:[url]}},{range,command:{title:'Clean LaTeX project',command:'latex-workshop.clean',arguments:[url]}}];
+  if(!state?.running&&state?.summary)result.push({range,command:{title:'Show build log',command:'latex-workshop.showLog',arguments:[url]}});
+  return result;
+}
+function workspaceSymbols(query){
+  const result=[],needle=(query||'').toLowerCase();
+  for(const folder of folders)for(const filename of core.scan(folder)){
+    if(!core.TEX.test(filename))continue;let source;try{source=core.read(filename,docs);}catch{continue;}
+    function visit(items){for(const item of items){if(item.name.toLowerCase().includes(needle))result.push({name:item.name,kind:item.kind,location:{uri:core.uri(filename),range:item.selectionRange},containerName:path.relative(folder,filename)});visit(item.children||[]);}}
+    visit(core.symbols(source));if(result.length>=200)return result.slice(0,200);
+  }return result;
+}
+async function checkTools(active){
+  const root=resolveRoot(active),recipe=core.recipe(root,config,folders.find(folder=>root.startsWith(folder)),undefined,lastRecipes.get(core.key(root)));
+  const rows=['LaTeX tool check',new Date().toISOString(),'Project: '+root,'Recipe: '+recipe.name,'Output: '+recipe.output,'Node: '+process.version+' — '+process.execPath,''];
+  let missing=0;const found=[];
+  function check(label,command,required=true,env={},cwd=recipe.cwd){try{const launch=tools.launch(command,{overrides:env,directories:config['latex.tools.searchPaths'],cwd});rows.push('[OK] '+label+': '+launch.command);found.push(path.dirname(launch.command));return launch;}catch(error){rows.push('['+(required?'MISSING':'OPTIONAL')+'] '+label+': '+error.message);if(required)missing++;}}
+  for(const step of recipe.steps){const launch=check('Recipe tool',step.command,true,step.env,step.cwd||recipe.cwd);if(launch&&/^latexmk(?:\.exe|\.pl)?$/i.test(path.basename(step.command))){const engine=step.args.some(arg=>/^-?(?:xelatex|pdfxe)$/.test(arg))?'xelatex':step.args.some(arg=>/^-?(?:lualatex|pdflua)$/.test(arg))?'lualatex':step.args.includes('-pdf')?'pdflatex':null;if(engine){try{const tool=tools.launch(engine,{base:launch.env,cwd:step.cwd||recipe.cwd});rows.push('[OK] Engine: '+tool.command);}catch(error){missing++;rows.push('[MISSING] Engine: '+error.message);}}}}
+  const first=recipe.steps[0];const clean=config['latex.clean.command']==='latexmk'&&/^latexmk(?:\.exe|\.pl)?$/i.test(path.basename(first?.command||''))?first.command:config['latex.clean.command'];check('Cleanup',clean,false,first?.env,first?.cwd||recipe.cwd);
+  const formatter=config['formatting.latex'];if(formatter!=='none')check('Formatter',config['formatting.'+formatter+'.path']||formatter);
+  try{const tool=tools.launch('kpsewhich',{directories:[...config['latex.tools.searchPaths'],...found],cwd:recipe.cwd});rows.push('[OK] Package catalog: '+tool.command);}catch{rows.push('[OPTIONAL] kpsewhich unavailable; installed-package completion requires kpsewhich and a TeX filename database.');}
+  rows.push('','Required tools missing: '+missing,'No settings or environment variables were modified.');
+  const filename=path.join(recipe.output,path.basename(root,path.extname(root))+'.latex-workshop-tools.log');report.save(filename,rows);
+  show((missing?'LaTeX tools need attention: '+missing+' missing.':'LaTeX tools found for '+recipe.name)+ '\nReport: '+filename,missing?1:3);
+  if(clientCapabilities.window?.showDocument?.support)await request('window/showDocument',{uri:core.uri(filename),external:false,takeFocus:true},3000).catch(()=>{});
+  return {missing,report:core.uri(filename)};
 }
 async function openBuildLog(active){
   const root=resolveRoot(active),rootKey=core.key(root);
@@ -221,9 +275,9 @@ async function openBuildLog(active){
 }
 async function handle(method,params){
   if(method==='initialize'){
-    folders=core.workspaceRoots(params);
+    clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.6'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.7'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.
@@ -262,6 +316,7 @@ async function handle(method,params){
 
     const entry=definition(params.textDocument.uri,params.position)[0];return entry?{contents:{kind:'plaintext',value:symbolAt(params.textDocument.uri,params.position)+' — '+core.file(entry.uri)}}:null;
   }
+  if(method==='workspace/symbol')return workspaceSymbols(params.query);
   if(method==='textDocument/documentSymbol')return core.symbols(text(params.textDocument.uri));
   if(method==='textDocument/formatting')return format(params.textDocument.uri,params.options);
   if(method==='textDocument/codeLens')return lenses(params.textDocument.uri);
@@ -269,10 +324,12 @@ async function handle(method,params){
   if(method==='textDocument/build')return build(core.file(params.textDocument.uri),params.recipe);
   if(method==='workspace/executeCommand'){
     if(params.command==='latex-workshop.build'||params.command==='latex-workshop.recipes')return build(core.file(params.arguments[0]),params.arguments[1]);
+    if(params.command==='latex-workshop.checkTools')return checkTools(core.file(params.arguments[0]));
     if(params.command==='latex-workshop.showLog')return openBuildLog(core.file(params.arguments[0]));
     if(params.command==='latex-workshop.clean')return cleanProject(core.file(params.arguments[0]));
-    if(params.command==='latex-workshop.kill'){for(const job of jobs.values()){terminate(job);}return null;}
+    if(params.command==='latex-workshop.kill'){if(params.arguments?.[0]){const job=jobs.get(core.key(resolveRoot(core.file(params.arguments[0]))));if(job)terminate(job);}else for(const job of jobs.values())terminate(job);return null;}
   }
+  if(method==='window/workDoneProgress/cancel'){for(const job of jobs.values())if(job.progress===params.token)terminate(job);return;}
   if(method==='$/cancelRequest'||method==='$/setTrace')return;
   const error=new Error('Method not found: '+method);error.code=-32601;throw error;
 }
@@ -285,7 +342,7 @@ process.stdin.on('data',chunk=>{
     let message;try{message=JSON.parse(input.subarray(end+4,end+4+size));}catch{send({id:null,error:{code:-32700,message:'Invalid JSON'}});}
     input=input.subarray(end+4+size);if(!message)continue;
     if(message.method){Promise.resolve().then(()=>handle(message.method,message.params || {})).then(result=>{if(message.id!==undefined)send({id:message.id,result:result ?? null});}).catch(error=>{if(message.id!==undefined)send({id:message.id,error:{code:error.code || -32603,message:error.message}});else show(error.message);});}
-    else if(pending.has(message.id)){const item=pending.get(message.id);pending.delete(message.id);message.error?item.reject(new Error(message.error.message)):item.resolve(message.result);}
+    else if(pending.has(message.id)){const item=pending.get(message.id);clearTimeout(item.timer);pending.delete(message.id);message.error?item.reject(new Error(message.error.message)):item.resolve(message.result);}
   }
 });
 process.stdin.on('end',()=>{for(const timer of timers.values())clearTimeout(timer);for(const job of jobs.values())terminate(job);process.exit();});

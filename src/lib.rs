@@ -29,6 +29,8 @@ impl zed::Extension for LatexExtension {
             .map_err(|error| error.to_string())?
             .join("latex-workshop-server");
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("completion.cjs"), include_str!("../server/completion.cjs"))
+            .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("core.cjs"), include_str!("../server/core.cjs"))
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("tools.cjs"), include_str!("../server/tools.cjs"))

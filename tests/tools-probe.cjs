@@ -12,6 +12,8 @@ const explicit=tools.launch(executable,{base});assert.equal(explicit.env.PATH.sp
 const result=spawnSync(explicit.command,['-e','const c=require("node:child_process").spawnSync(process.argv[1],["--version"]);process.stdout.write(c.stdout);process.exit(c.status ?? 1)',path.basename(executable)],{env:explicit.env,encoding:'utf8'});
 assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/v\d+/);
 const win=tools.environment({Path:'old',PATH:'second',KEEP:'yes'},{pAtH:'override'},['tools'],'win32');assert.equal(win.PATH,'tools;override');assert.equal(Object.keys(win).filter(k=>k.toLowerCase()==='path').length,1);assert.equal(win.KEEP,'yes');
+assert.equal(tools.environment({Path:'original',HOME:'user'},{Path:'extra;${env:Path}',DATA:'${env:HOME}'},[],'win32').PATH,'extra;original');
+assert.equal(tools.environment({PATH:'original'},{PATH:'extra:$PATH'},[],'linux').PATH,'extra:original');
 assert.throws(()=>tools.launch('missing-tool-unique',{base}),/Install the tool/);
 assert.throws(()=>tools.launch('missing-tool-unique',{directories:'bad'}),/array/);
 fs.rmSync(root,{recursive:true,force:true});

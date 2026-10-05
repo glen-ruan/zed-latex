@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.7
+
+- Add capability-gated LSP work-done progress, recipe/step feedback, elapsed time, build-state lenses and project-scoped cancellation. Manual builds report successful completion; finished lenses link to the log.
+- Complete local TeX, image and bibliography paths with precise replacement ranges; navigate to referenced files and search sections across the workspace.
+- Complete installed packages/classes from kpsewhich and the TeX filename database, with local package fallback; add argument snippets for supported clients.
+- Add Check LaTeX tools with resolved executable paths and a saved report. Expand inherited environment references in imported tool settings without changing user configuration.
+
 ## 0.4.6
 
 - Add standard LSP build/clean Code Lens and a Show LaTeX build log action. Code Lens display requires the user's Zed code_lens setting.

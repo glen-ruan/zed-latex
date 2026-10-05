@@ -139,3 +139,14 @@ Code Lens 提供 **Build LaTeX project** 和 **Clean LaTeX project**，位于主
 也可以设为 `menu`，或继续使用现有代码操作。依据：[Zed Code Lens 设置](https://zed.dev/docs/reference/all-settings#code-lens)。
 
 F4 中直接执行 latexmk 的原生任务仍是独立入口，不会经过插件的互斥、清理重试或上述完整日志。当前 Zed 扩展任务接口不能把本服务的构建命令直接注册为语言服务任务；源码依据与版本边界见 [接口核查](docs/zed-integration.md)。
+## 0.4.7 编译反馈、补全与工具检查
+
+编译按钮在进行中显示当前配方和 Stop，结束后显示成功、失败或取消以及耗时；完成后可直接点击 Show build log。服务通过标准 LSP work-done progress 报告当前步骤和清理重试；只在客户端声明支持时发送进度和 Code Lens 刷新请求。手动编译也发送开始与完成提示，自动编译不弹出成功提示。具体进度位置由编辑器决定，原生终端任务仍独立。
+
+路径补全支持 input/include/subfile、includegraphics、bibliography/addbibresource，包含目录及相应文件类型。查找主文件目录和当前文件目录，替换当前参数中的路径片段；逗号分隔引用或包名只替换当前项。路径跳转支持上述文件命令。当前不展开宏生成的路径、graphicspath 或复杂 import 路径上下文。
+
+usepackage/RequirePackage 与 documentclass 补全读取本机 kpsewhich 返回的 TEXMFDIST 文件名数据库，并包含项目中的 sty/cls 文件。数据库按工具路径缓存，新增安装的包需要重启服务刷新；没有 kpsewhich 或 ls-R 时仍可补全项目本地包，不宣称覆盖所有发行版。命令补全为支持 snippets 的编辑器提供 frac、sqrt、文字样式、章节和环境等参数片段。工作区符号搜索支持跨文件章节标题，结果附带来源文件。
+
+通过代码操作 **Check LaTeX tools** 检查当前配方工具、可识别的 latexmk 引擎、启用的格式化器，以及清理工具和包目录工具。报告保存为输出目录中的 `<主文件名>.latex-workshop-tools.log`；支持 showDocument 的客户端会打开报告。检查只查找程序，不执行编译、不安装依赖、不改写设置；实际工具运行和 TeX 包依赖仍由构建验证。
+
+工具 env 支持 `${env:变量名}` 和 `$PATH` 引用继承环境，Windows 下环境变量名不区分大小写。例如导入 Workshop 的 `Path: "工具目录;${env:Path}"` 能保留原 PATH。这里是字符串替换，不执行 shell 表达式。无需向 tasks 添加包装脚本。

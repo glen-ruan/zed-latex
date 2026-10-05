@@ -2,6 +2,8 @@
 const fs=require('node:fs'),path=require('node:path');
 function environment(base,overrides={},directories=[],platform=process.platform){
   const env={...base};
+  function value(name){const key=Object.keys(base).find(key=>platform==='win32'?key.toLowerCase()===name.toLowerCase():key===name);return key===undefined?'':base[key];}
+  overrides=Object.fromEntries(Object.entries(overrides).map(([key,text])=>[key,String(text).replace(/\$\{env:([^}]+)\}|\$PATH\b/g,(_,name)=>value(name||'PATH'))]));
   if(platform!=='win32')return {...env,...overrides,PATH:[...directories,overrides.PATH ?? base.PATH ?? ''].filter(Boolean).join(path.delimiter)};
   let inherited='',supplied;
   for(const key of Object.keys(env))if(key.toLowerCase()==='path'){inherited=env[key];delete env[key];}
