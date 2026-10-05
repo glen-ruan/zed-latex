@@ -276,8 +276,8 @@ function lenses(url){
   const source=text(url),match=/\\documentclass\b/.exec(core.mask(source));
   const position=core.position(source,match?.index||0),range={start:position,end:position};
   let state;try{state=buildStates.get(core.key(resolveRoot(core.file(url))));}catch{}
-  const result=[{range,command:{title:state?.running?'Compiling '+state.recipe+' (Stop)':state?.summary?'Build LaTeX project — '+state.summary:'Build LaTeX project',command:state?.running?'latex-workshop.kill':'latex-workshop.build',arguments:[url]}},{range,command:{title:'Clean LaTeX project',command:'latex-workshop.clean',arguments:[url]}}];
-  if(!state?.running&&state?.summary)result.push({range,command:{title:'Show build log',command:'latex-workshop.showLog',arguments:[url]}});
+  const result=[{range,command:{title:state?.running?'[ ■ 停止 ] 正在编译 '+state.recipe:state?.summary?'[ ▶ 编译 ] '+state.summary:'[ ▶ 编译 ]',command:state?.running?'latex-workshop.kill':'latex-workshop.build',arguments:[url]}},{range,command:{title:'[ 清理 ]',command:'latex-workshop.clean',arguments:[url]}}];
+  if(!state?.running&&state?.summary)result.push({range,command:{title:'[ 日志 ]',command:'latex-workshop.showLog',arguments:[url]}});
   return result;
 }
 function workspaceSymbols(query){
@@ -316,7 +316,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.12'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.13'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

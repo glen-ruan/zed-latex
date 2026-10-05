@@ -194,3 +194,8 @@ newcommand、renewcommand、providecommand、DeclareRobustCommand 风格的项�
 检查不执行编译器、不安装依赖、不改写设置；它会写入检查报告。它检查本插件支持的配置和当前配方，未验证所有 LaTeX Workshop 选项、其他配方的可执行文件或 Zed 顶层设置 schema。
 
 配方和命名工具的格式参考 [LaTeX Workshop 官方编译说明](https://github.com/James-Yu/LaTeX-Workshop/wiki/Compile#latex-recipes)。
+
+
+## 0.4.13 CodeLens 可辨识性
+
+CodeLens 显示为 `[ ▶ 编译 ]`、`[ 清理 ]`，构建中为 `[ ■ 停止 ]`，完成后可通过 `[ 日志 ]` 查看输出。这些是带视觉边界的可点击文字，不是真正的背景/边框按钮。Zed 负责字号、颜色和悬停外观，插件不改写用户主题或全局设置。

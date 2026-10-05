@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.13
+
+- Make build, clean, stop and log CodeLens actions easier to recognize with Chinese labels, visual brackets and action glyphs.
+- Preserve command identifiers and build-state feedback; appearance remains rendered by Zed rather than a custom button widget.
+
+
 ## 0.4.12
 
 - Aggregate configuration errors with setting keys and actionable hints, including recipe/tool shapes, empty or duplicate recipes, unknown tool references and placeholders.
