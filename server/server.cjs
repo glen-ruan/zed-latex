@@ -174,7 +174,10 @@ async function installedTexNames(){
 }
 function commandInfo(name,idx){
   const entry=idx.commands.get(name);
-  if(entry){const source=core.read(entry.file,docs),signature=commandHelp.custom(name,source,entry)||'\\'+name;const snippet=signature.slice(1).replace(/参数(\d)/g,(_,n)=>String.fromCharCode(36)+'{'+n+':参数'+n+'}');return {signature,snippet,documentation:signature+'\n自定义命令\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};}
+  if(entry){const source=core.read(entry.file,docs),modern=entry.documentSpec!==undefined?require('./document-commands.cjs').signature(name,entry.documentSpec):null;
+    const signature=entry.documentSpec!==undefined?(modern?.signature||'\\'+name):commandHelp.custom(name,source,entry)||'\\'+name;
+    const snippet=entry.documentSpec!==undefined?(modern?.snippet||name):signature.slice(1).replace(/参数(\d)/g,(_,n)=>String.fromCharCode(36)+'{'+n+':参数'+n+'}');
+    return {signature,snippet,documentation:signature+'\n自定义命令'+(entry.documentSpec!==undefined?'\n参数声明：'+entry.documentSpec+'\n'+(modern?.details||'该参数声明暂不推断调用签名；保留原始声明。'):'')+'\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};}
   const record=idx.packageCommands.get(name),help=commandHelp.HELP[name];
   if(record)return {signature:record.signature,snippet:record.snippet,documentation:[...record.variants.slice(0,4),'宏包：'+record.package,help?.[1]||record.description].filter(Boolean).join('\n\n')};
   if(help)return {signature:help[0],snippet:completion.snippets(name)?.[0]||name,documentation:help[0]+'\n\n'+help[1]};
@@ -328,7 +331,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.15'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.16'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

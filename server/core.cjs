@@ -113,10 +113,15 @@ function index(files,docs) {
       for(const match of source.matchAll(/@(?!(?:comment|string|preamble)\b)([a-z]+)\s*[{(]\s*([^,\s{}()]+)\s*,/ig))result.citations.set(match[2],{file:filename,range:range(source,match.index,match.index+match[0].length),detail:source.slice(match.index,match.index+400)});
       continue;
     }
-    const clean=mask(source);
+    let clean=mask(source);
+    const modern=require('./document-commands.cjs').scan(clean);
+    const definitions=modern.map(item=>({name:item.name,environment:item.environment,start:item.start,entry:{file:filename,range:range(source,item.nameStart,item.nameEnd),documentSpec:item.spec}}));
+    // Definitions can contain example labels and nested definitions; they are not document instances.
+    for(const item of modern.slice().reverse())clean=clean.slice(0,item.start)+clean.slice(item.start,item.end).replace(/[^\r\n]/g,' ')+clean.slice(item.end);
     for(const match of clean.matchAll(/\\label\s*\{([^{}\\#]+)\}/g))result.labels.set(match[1],{file:filename,range:range(source,match.index,match.index+match[0].length)});
-    for(const match of clean.matchAll(/\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?\s*\{?\\([A-Za-z@]+)\}?|\\(?:[egx]?def)\s*\\([A-Za-z@]+)/g))result.commands.set(match[1]||match[2],{file:filename,range:range(source,match.index,match.index+match[0].length)});
-    for(const match of clean.matchAll(/\\(?:newenvironment|renewenvironment)\*?\s*\{([^{}]+)\}/g))result.environments.set(match[1],{file:filename,range:range(source,match.index,match.index+match[0].length)});
+    for(const match of clean.matchAll(/\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?\s*\{?\\([A-Za-z@]+)\}?|\\(?:[egx]?def)\s*\\([A-Za-z@]+)/g))definitions.push({name:match[1]||match[2],start:match.index,entry:{file:filename,range:range(source,match.index,match.index+match[0].length)}});
+    for(const match of clean.matchAll(/\\(?:newenvironment|renewenvironment)\*?\s*\{([^{}]+)\}/g))definitions.push({name:match[1],environment:true,start:match.index,entry:{file:filename,range:range(source,match.index,match.index+match[0].length)}});
+    for(const item of definitions.sort((a,b)=>a.start-b.start))(item.environment?result.environments:result.commands).set(item.name,item.entry);
   }
   return result;
 }

@@ -27,7 +27,9 @@ function symbols(source,api){
     let preceding=0;for(let i=match.index-1;i>=0&&clean[i]==='\\';i--)preceding++;
     if(preceding%2)continue;
     const command=match[1],level=LEVELS.indexOf(command);let cursor=tokens.lastIndex;
-    if(level>=0||command==='caption'){
+    if(require('./document-commands.cjs').FAMILY.test(command)){
+      const definition=require('./document-commands.cjs').definition(clean,match.index);if(definition)tokens.lastIndex=definition.end;
+    }else if(level>=0||command==='caption'){
       const optional=group(clean,cursor,'[',']');if(optional)cursor=optional.next;
       const title=group(clean,cursor);if(!title)continue;tokens.lastIndex=title.next;
       const shown=optional||title,selection={start:shown.start,end:shown.end};
