@@ -1,0 +1,40 @@
+[
+  {
+    "label": "Project: XeLaTeX",
+    "command": "latexmk",
+    "args": [
+      "-xelatex",
+      "-cd",
+      "-synctex=1",
+      "-interaction=nonstopmode",
+      "-file-line-error",
+      "-recorder",
+      "-outdir=build",
+      "-halt-on-error",
+      "main.tex"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "save": "all",
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  },
+  {
+    "label": "Project: XeLaTeX (watch)",
+    "command": "latexmk",
+    "args": [
+      "-xelatex",
+      "-cd",
+      "-synctex=1",
+      "-interaction=nonstopmode",
+      "-file-line-error",
+      "-recorder",
+      "-outdir=build",
+      "-pvc",
+      "main.tex"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "save": "all",
+    "allow_concurrent_runs": false,
+    "reveal": "always"
+  }
+]

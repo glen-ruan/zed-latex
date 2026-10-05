@@ -1,0 +1,193 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const {pathToFileURL, fileURLToPath} = require('node:url');
+const TEX = /\.(tex|latex|cls|sty|def|dtx|ins)$/i;
+const SOURCE = /\.(tex|latex|cls|sty|def|dtx|ins|bib|bibtex|biblatex)$/i;
+const IGNORE = new Set(['.git','.dev','node_modules','build','target','.zed']);
+const DEFAULTS = {
+  'latex.outDir': 'build',
+  'latex.tools.searchPaths': [],
+  'latex.autoBuild.run': 'onFileChange',
+  'latex.autoBuild.interval': 1000,
+  'latex.autoBuild.cleanAndRetry.enabled': true,
+  'latex.clean.method': 'command',
+  'latex.clean.command': 'latexmk',
+  'latex.clean.args': ['-outdir=%OUTDIR%','-auxdir=%AUXDIR%','-c','%TEX%'],
+  'latex.recipe.default': 'first',
+  'latex.build.enableMagicComments': true,
+  'latex.recipes': [{name:'XeLaTeX (latexmk)',tools:['latexmk-xelatex']}],
+  'latex.tools': [{name:'latexmk-xelatex',command:'latexmk',args:['-xelatex','-cd','-synctex=1','-interaction=nonstopmode','-file-line-error','-halt-on-error','-recorder','-outdir=%OUTDIR%','%DOC%']}],
+  'formatting.latex': 'none',
+  'formatting.latexindent.path': 'latexindent',
+  'formatting.latexindent.args': ['-c','%DIR%/','%TMPFILE%'],
+  'formatting.tex-fmt.path': 'tex-fmt',
+  'formatting.tex-fmt.args': ['--nowrap'],
+};
+function workspaceRoots(params,cwd=process.cwd()) {
+  const supplied=params.workspaceFolders?.map(item=>file(item.uri))||[];
+  return supplied.length?supplied:[params.rootUri?file(params.rootUri):path.resolve(params.rootPath||cwd)];
+}
+function uri(file) { return pathToFileURL(path.resolve(file)).href; }
+function file(url) { return fileURLToPath(url); }
+function key(file) { const result=path.resolve(file);return process.platform==='win32'?result.toLowerCase():result; }
+function read(file, docs) { return docs?.get(key(file))?.text ?? fs.readFileSync(file,'utf8'); }
+function settings(raw={}) {
+  const inner=raw['latex-workshop'] || raw;
+  const result={...DEFAULTS};
+  for(const [k,v] of Object.entries(inner)) result[k.replace(/^latex-workshop\./,'')]=v;
+  return result;
+}
+function mask(source) {
+  // Keep offsets intact while excluding comments and verbatim contents.
+  return source.replace(/\\begin\{(verbatim\*?|lstlisting|minted|comment)\}[\s\S]*?\\end\{\1\}|\\verb\*?([^\w\s])[\s\S]*?\2|(?<!\\)(?:\\\\)*%[^\r\n]*/g, text=>text.replace(/[^\r\n]/g,' '));
+}
+function scan(folder, result=[], depth=0) {
+  if(depth>25 || result.length>5000) return result;
+  let entries;try{entries=fs.readdirSync(folder,{withFileTypes:true});}catch{return result;}
+  for(const entry of entries){
+    if(entry.isSymbolicLink())continue;
+    const full=path.join(folder,entry.name);
+    if(entry.isDirectory() && !IGNORE.has(entry.name))scan(full,result,depth+1);
+    else if(entry.isFile() && SOURCE.test(full) && fs.statSync(full).size<4*1024*1024)result.push(full);
+  }
+  return result;
+}
+function included(file, docs) {
+  let source;try{source=mask(read(file,docs));}catch{return [];}
+  const targets=[];
+  for(const match of source.matchAll(/\\(?:input|include|subfile)\s*\{([^{}]+)\}/g)) {
+    if(/[\\#$]/.test(match[1]))continue;
+    const candidate=path.resolve(path.dirname(file),match[1]);
+    for(const target of [candidate,candidate+'.tex'])if(fs.existsSync(target)){targets.push(target);break;}
+  }
+  for(const match of source.matchAll(/\\(?:import|subimport)\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g)){
+    const candidate=path.resolve(path.dirname(file),match[1],match[2]);
+    for(const target of [candidate,candidate+'.tex'])if(fs.existsSync(target)){targets.push(target);break;}
+  }
+  for(const match of source.matchAll(/\\(?:bibliography|addbibresource)(?:\[[^\]]*\])?\s*\{([^{}]+)\}/g)){
+    for(const name of match[1].split(',')){
+      const candidate=path.resolve(path.dirname(file),name.trim());
+      for(const target of [candidate,candidate+'.bib'])if(fs.existsSync(target)){targets.push(target);break;}
+    }
+  }
+  return targets;
+}
+function dependencies(root,docs,result=new Set()) {
+  if(result.has(key(root)))return result;
+  result.add(key(root));
+  if(TEX.test(root))for(const target of included(root,docs))dependencies(target,docs,result);
+  return result;
+}
+function rootFile(active,folders,docs,explicit) {
+  if(explicit)return path.resolve(folders[0] || path.dirname(active),explicit);
+  let current=path.resolve(active);const visited=new Set();
+  while(TEX.test(current)){
+    if(visited.has(key(current)))throw new Error('Cycle in % !TeX root comments');
+    visited.add(key(current));
+    const source=read(current,docs);
+    const magic=/^\s*%\s*!\s*tex\s+root\s*=\s*(.+?)\s*$/im.exec(source);
+    if(!magic)break;
+    current=path.resolve(path.dirname(current),magic[1].replace(/^(["'])(.*)\1$/,'$2'));
+    if(!fs.existsSync(current) && !docs?.has(key(current)))throw new Error('Magic root does not exist: '+current);
+  }
+  if(/\\documentclass\b/.test(mask(read(current,docs))))return current;
+  const candidates=[];
+  for(const folder of folders)for(const candidate of scan(folder)){
+    if(!/\.(tex|latex)$/i.test(candidate))continue;
+    if(/\\documentclass\b/.test(mask(read(candidate,docs))) && dependencies(candidate,docs).has(key(current)))candidates.push(candidate);
+  }
+  if(candidates.length===1)return candidates[0];
+  if(candidates.length>1)throw new Error('Multiple main files include this file; add % !TeX root = ...');
+  throw new Error('Main file not found; add % !TeX root = ... or open the project folder');
+}
+function position(source,offset) { const before=source.slice(0,offset).split('\n');return {line:before.length-1,character:before.at(-1).length}; }
+function offset(source,pos) { const lines=source.split('\n');return lines.slice(0,pos.line).reduce((n,line)=>n+line.length+1,0)+pos.character; }
+function range(source,start,end=start+1) { return {start:position(source,start),end:position(source,end)}; }
+function index(files,docs) {
+  const result={labels:new Map(),citations:new Map(),commands:new Map(),environments:new Map(),files:[]};
+  for(const filename of files){
+    let source;try{source=read(filename,docs);}catch{continue;}
+    result.files.push(filename);
+    if(/\.(bib|bibtex|biblatex)$/i.test(filename)){
+      for(const match of source.matchAll(/@(?!(?:comment|string|preamble)\b)([a-z]+)\s*[{(]\s*([^,\s{}()]+)\s*,/ig))result.citations.set(match[2],{file:filename,range:range(source,match.index,match.index+match[0].length),detail:source.slice(match.index,match.index+400)});
+      continue;
+    }
+    const clean=mask(source);
+    for(const match of clean.matchAll(/\\label\s*\{([^{}\\#]+)\}/g))result.labels.set(match[1],{file:filename,range:range(source,match.index,match.index+match[0].length)});
+    for(const match of clean.matchAll(/\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?\s*\{?\\([A-Za-z@]+)\}?|\\(?:[egx]?def)\s*\\([A-Za-z@]+)/g))result.commands.set(match[1]||match[2],{file:filename,range:range(source,match.index,match.index+match[0].length)});
+    for(const match of clean.matchAll(/\\(?:newenvironment|renewenvironment)\*?\s*\{([^{}]+)\}/g))result.environments.set(match[1],{file:filename,range:range(source,match.index,match.index+match[0].length)});
+  }
+  return result;
+}
+function symbols(source) {
+  const result=[];const levels=['part','chapter','section','subsection','subsubsection','paragraph','subparagraph'];
+  for(const match of mask(source).matchAll(/\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?(?:\[[^\]]*\])?\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g))result.push({name:match[2],kind:2,range:range(source,match.index,match.index+match[0].length),selectionRange:range(source,match.index,match.index+match[0].length),level:levels.indexOf(match[1]),children:[]});
+  const roots=[],stack=[];
+  for(let i=0;i<result.length;i++){
+    const item=result[i];let next=i+1;while(next<result.length && result[next].level>item.level)next++;
+    item.range.end=position(source,next<result.length?offset(source,result[next].range.start):source.length);
+    while(stack.length && stack.at(-1).level>=item.level)stack.pop();
+    (stack.at(-1)?.children || roots).push(item);stack.push(item);
+  }
+  function strip(items){for(const item of items){delete item.level;strip(item.children);}return items;}
+  return strip(roots);
+}
+function diagnostic(message,source,start,severity=1) { return {source:'latex-workshop',message,severity,range:range(source,start,Math.min(start+1,source.length))}; }
+function syntaxDiagnostics(source,filename) {
+  if(!/\.(tex|latex)$/i.test(filename))return [];
+  const clean=mask(source),stack=[],envs=[],result=[];
+  for(let i=0;i<clean.length;i++){
+    if(clean[i]==='\\'){i++;continue;}
+    if(clean[i]==='{')stack.push(i);
+    else if(clean[i]==='}') { if(stack.length)stack.pop();else result.push(diagnostic('Unexpected closing brace',source,i)); }
+  }
+  for(const start of stack)result.push(diagnostic('Unclosed brace',source,start));
+  for(const match of clean.matchAll(/\\(begin|end)\s*\{([^{}]+)\}/g)){
+    if(match[1]==='begin')envs.push({name:match[2],start:match.index});
+    else if(envs.at(-1)?.name===match[2])envs.pop();
+    else result.push(diagnostic('Unmatched \\end{'+match[2]+'}',source,match.index));
+  }
+  for(const env of envs)result.push(diagnostic('Unclosed environment '+env.name,source,env.start));
+  return result;
+}
+function placeholders(root,outDir,workspace,jobname) {
+  const dir=path.dirname(root),stem=path.basename(root,path.extname(root)),doc=path.join(dir,stem);
+  const first={DOC:doc,DOC_EXT:root,DOCFILE:stem,DOCFILE_EXT:path.basename(root),DIR:dir,WORKSPACE_FOLDER:workspace || dir,TMPDIR:require('node:os').tmpdir(),RELATIVE_DIR:path.relative(workspace || dir,dir),RELATIVE_DOC:path.relative(workspace || dir,doc)};
+  const replaceFirst=s=>String(s).replace(/%([A-Z_]+)%/g,(all,name)=>first[name] ?? all);
+  const output=path.resolve(dir,replaceFirst(outDir));
+  const values={...first,OUTDIR:output,AUXDIR:output,TMPFILE:'',JOBNAME:jobname || stem};
+  for(const [name,value] of Object.entries({...values}))values[name+'_W32']=value.replace(/\\/g,'/').replace(/\//g,'\\');
+  return {output,expand:s=>String(s).replace(/%([A-Z_]+)%/g,(all,name)=>values[name] ?? all),values};
+}
+function recipe(root,config,workspace,name,lastRecipe) {
+  const source=read(root),values=placeholders(root,config['latex.outDir'],workspace,config['latex.jobname']);
+  const magic=config['latex.build.enableMagicComments'];
+  const preferred=name || (magic && /^\s*%\s*!\s*LW\s+recipe\s*=\s*(.+?)\s*$/im.exec(source)?.[1]) || config['latex.recipe.default'];
+  const recipes=config['latex.recipes'];
+  let chosen=preferred==='lastUsed'?recipes.find(r=>r.name===lastRecipe):recipes.find(r=>r.name===preferred);
+  if(!chosen && (preferred==='first'||preferred==='lastUsed'))chosen=recipes[0];
+  if(!chosen)throw new Error('Unknown recipe: '+preferred);
+  const program=magic && !name && /^\s*%\s*!\s*tex\s+program\s*=\s*(\S+)\s*$/im.exec(source)?.[1];
+  let tools;
+  if(program){
+    const args=config['latex.magic.args'] || (program==='latexmk'?['-xelatex','-outdir=%OUTDIR%','%DOC%']:['-synctex=1','-interaction=nonstopmode','-file-line-error','-halt-on-error','-output-directory=%OUTDIR%','%DOC%']);
+    tools=[{name:program,command:program,args}];
+  }else tools=chosen.tools.map(name=>{
+    if(typeof name==='object')return name;
+    const tool=config['latex.tools'].find(tool=>tool.name===name);if(!tool)throw new Error('Unknown recipe tool: '+name);return tool;
+  });
+  return {name:program || chosen.name,output:values.output,cwd:config['latex.build.fromFolder']?path.resolve(path.dirname(root),values.expand(config['latex.build.fromFolder'])):path.dirname(root),steps:tools.map(tool=>({cwd:tool.cwd?path.resolve(path.dirname(root),values.expand(tool.cwd)):undefined,command:values.expand(tool.command),args:(tool.args||[]).map(values.expand),env:Object.fromEntries(Object.entries(tool.env||{}).map(([k,v])=>[k,values.expand(v)]))}))};
+}
+function logDiagnostics(output,root) {
+  const result=new Map();let fallback=0;
+  for(const line of output.split(/\r?\n/)){
+    const match=/^(.+?\.(?:tex|cls|sty|def|bib)):(\d+):\s*(.+)$/.exec(line);
+    if(match){const filename=path.resolve(path.dirname(root),match[1]);const severity=/warning/i.test(match[3])?2:1;const diagnostic={source:'latex-workshop',message:match[3],severity,range:{start:{line:Number(match[2])-1,character:0},end:{line:Number(match[2])-1,character:1}}};const url=uri(filename);if(!result.has(url))result.set(url,[]);result.get(url).push(diagnostic);continue;}
+    if(line.startsWith('! ')){const url=uri(root);if(!result.has(url))result.set(url,[]);result.get(url).push({source:'latex-workshop',message:line.slice(2),severity:1,range:{start:{line:fallback,character:0},end:{line:fallback,character:1}}});}
+    const warning=/^(?:LaTeX|Package \S+|Class \S+) Warning:\s*(.+?)(?: on input line (\d+)\.)?$/.exec(line);
+    if(warning){const url=uri(root);if(!result.has(url))result.set(url,[]);const lineNumber=Number(warning[2]||1)-1;result.get(url).push({source:'latex-workshop',message:warning[1],severity:2,range:{start:{line:lineNumber,character:0},end:{line:lineNumber,character:1}}});}
+  }
+  return result;
+}
+module.exports={workspaceRoots,TEX,SOURCE,DEFAULTS,uri,file,key,read,settings,mask,scan,included,dependencies,rootFile,position,offset,range,index,symbols,syntaxDiagnostics,placeholders,recipe,logDiagnostics};

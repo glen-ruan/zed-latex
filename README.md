@@ -1,42 +1,141 @@
-# LaTeX for Zed — XeLaTeX & expl3
+# LaTeX Workshop for Zed
 
-基于 [rzukic/zed-latex](https://github.com/rzukic/zed-latex) 的公开分支，主要改善 LaTeX 模板源码的命令识别，并提供明确的 XeLaTeX 构建入口。
+基于 [rzukic/zed-latex](https://github.com/rzukic/zed-latex)，参照 [LaTeX Workshop](https://github.com/James-Yu/LaTeX-Workshop) 的编辑与编译工作流。使用 Zed 原生语言功能和独立 Node 语言服务，不依赖 TexLab。当前不实现 PDF 预览或 SyncTeX 联动。
 
-## 主要调整
+## 当前实现
 
-- 完整识别 `\sys_if_engine_xetex:TF`、`\cs:w` 等 expl3 命令，以及 `\l_`、`\g_`、`\c_`、`\q_` 开头的命名变量。
-- 保留 `@` 内部命令识别，并将 `.def` 文件识别为 LaTeX。
-- 保留普通公式中 `\alpha_i`、`\omega_c` 的下标识别。
-- 新增 **XeLaTeX (latexmk)** 与 **XeLaTeX (latexmk, watch)** 构建任务。
-- 保留上游 TexLab、补全、诊断及其他构建任务。颜色由当前 Zed 主题决定。
+| 功能 | 实现 |
+| --- | --- |
+| 语法、高亮、折叠、缩进、结构导航 | Tree-sitter 查询，含 expl3、`@` 命令、数学下标；LSP 提供章节层级 |
+| 代码片段 | `env/sec/subsec/fig/eq/itemize/cite/ref/input`，环境名共享占位符 |
+| 补全和定义跳转 | 项目标签、BibTeX 引用、自定义命令和环境，常用命令、环境与输入文件 |
+| 查找引用、重命名 | 项目内标签和 BibTeX 引用键，通过标准 LSP 编辑返回修改 |
+| 主文件识别 | `% !TeX root`、`\documentclass` 与 input/include/subfile/import、bibliography/addbibresource 依赖；歧义时提示指定主文件 |
+| 编译 recipes | 按顺序执行 tools，支持 args、env、cwd；默认 XeLaTeX + latexmk，输出到 `build` |
+| 编译诊断 | 文件行号错误、常见警告；实时检查花括号和环境配对 |
+| 自动编译 | `never/onSave/onFileChange`，防抖与同一主文件串行编译；监测已识别的依赖文件 |
+| 格式化 | 内置 BibTeX 基础格式化；LaTeX 可选 latexindent 或 tex-fmt，默认关闭 |
+| `.bst` | 独立 Tree-sitter 解析器，提供注释、字符串、数字、函数、控制词和内置操作高亮，以及函数导航、折叠；不交给 TeX 服务 |
+
+这是按 Workshop 行为重建的实现，不是完整运行 VS Code 插件。当前补全集合小于 Workshop 的包数据库；复杂动态宏、跨文件 outline 树、自定义命令重命名、完整辅助文件清理规则、完整 BibTeX 格式化选项及所有 Workshop 命令尚未实现。格式化器和 TeX 编译器是外部工具。
 
 ## 安装
 
-本分支尚未发布到 Zed 扩展市场。开发版安装方式：
+1. 按 [Rust 官方安装说明](https://rust-lang.org/tools/install/)安装 rustup；确认普通终端能运行 `rustc --version` 和 `cargo --version`。Windows 需要 Visual Studio C++ 工具集。仓库的 `rust-toolchain.toml` 声明 stable 与 `wasm32-wasip2`。
+2. Zed 执行 `zed: install dev extension`，选择本仓库。扩展 ID 保持 `latex`，开发版会覆盖同名市场扩展。
+3. 把 TeX Live 的工具目录加入 **Zed 进程的 PATH**，完全退出后重开。至少需要 `latexmk`、`xelatex`，参考文献按项目使用 BibTeX 或 Biber。
 
-1. 克隆本仓库。
-2. 按 [Zed 开发扩展说明](https://zed.dev/docs/extensions/developing-extensions) 准备 Rust 与 `wasm32-wasip2` 目标；Windows 还需要 Rust 对应的本机 C/C++ 链接工具。
-3. 在 Zed 命令面板运行 `zed: install dev extension`，选择仓库根目录。
+语言服务脚本嵌入扩展 WASM，不需要 npm 安装依赖。优先使用 PATH 上的 Node，缺少时使用 Zed 管理的 Node。已有 `lsp.texlab` 设置不会配置本服务；请使用 `lsp.latex-workshop.settings`。
 
-扩展 ID 仍为 `latex`，开发版将覆盖已安装的同名扩展。卸载开发版即可恢复市场版本。
+```json
+{
+  "languages": {
+    "LaTeX": { "language_servers": ["latex-workshop"] },
+    "BibTeX": { "language_servers": ["latex-workshop"] }
+  },
+  "lsp": {
+    "latex-workshop": {
+      "settings": {
+        "latex.autoBuild.run": "onSave",
+        "latex.outDir": "build",
+        "latex.tools.searchPaths": [],
+        "formatting.latex": "tex-fmt",
+        "formatting.tex-fmt.path": "tex-fmt"
+      }
+    }
+  }
+}
+```
 
-## 编译文档
+LaTeX 格式化默认 `none`，开启 `latexindent` 或 `tex-fmt` 后需要对应可执行文件。不存在时会报出工具名称和路径设置项，不静默成功。BibTeX 格式化无需外部依赖。
 
-打开包含 `\documentclass` 的主文件，点击旁边的运行按钮，选择 **XeLaTeX (latexmk)**。编译结果输出到主文件所在目录的 `build/`。持续编译可选择 watch 任务。
+## 配置与操作
 
-需要安装 TeX Live 或其他包含 `latexmk` 与 `xelatex` 的发行版，并将其可执行文件目录加入 Zed 进程的 PATH；更改 PATH 后应完全退出并重新打开 Zed。构建任务与 TexLab 的 `build.executable` 是独立配置，后者的绝对路径不会自动应用到任务。
+支持读取项目 `.vscode/settings.json` 中的 `latex-workshop.*` 设置以及上述 Zed 配置。Zed 配置优先。项目文件当前支持 JSON、整行注释和尾随逗号。
 
-Windows TeX Live 路径示例：`D:\software\texlive\2026\bin\windows`。多文件项目请从主文件运行；本分支未添加自动寻找主文件的功能。
+主要设置：`latex.recipes`、`latex.tools`、`latex.recipe.default`（first/lastUsed/名称）、`latex.outDir`、`latex.autoBuild.run`、`latex.autoBuild.interval`、`latex.build.enableMagicComments`、`formatting.latex`、`formatting.latexindent.path/args`、`formatting.tex-fmt.path/args`。扩展补充 `latex.rootFile` 可显式指定项目主文件。只声明这里列出的配置，不保证兼容所有 Workshop 设置。
 
-## 源码结构
+工具参数支持 `%DOC%`（绝对路径，不含扩展名）、`%DOC_EXT%`、`%DOCFILE%`、`%DOCFILE_EXT%`、`%DIR%`、`%OUTDIR%`、`%AUXDIR%`、`%WORKSPACE_FOLDER%`、`%RELATIVE_DIR%`、`%RELATIVE_DOC%`、`%TMPDIR%`、`%JOBNAME%` 及 W32 变体。`AUXDIR` 当前与 `OUTDIR` 相同。遵循 Workshop 的 DOC/DOC_EXT 区分。默认主编译器和输出目录按本项目需求使用 XeLaTeX 与 build。
 
-- `languages/latex/`：文件类型、高亮查询、结构导航与构建任务。
-- `parser/latex/`：与原扩展固定版本保持一致的解析器源码，以及 expl3 命令名修正。
-- `src/`：上游 Rust 扩展与 TexLab 集成。
-- `extension.toml`：扩展元数据及固定的解析器来源。
+在 TeX 文件打开代码操作，选择 **Build LaTeX project** 或指定 recipe；编译期间可选择 **Terminate LaTeX compilation**。完整输出位于语言服务日志，错误同时进入 Zed 诊断。Zed 原生任务另提供 XeLaTeX 单次与 watch 编译；此路径的日志显示在任务终端。原生任务从主文件执行，固定主文件的示例见 `examples/multifile/.zed/tasks.json`。
 
-修改语法后应在 `parser/latex/` 中执行 `tree-sitter generate --abi 14`，提交生成的 `src/` 文件，并更新清单的解析器提交号。命令识别采用静态规则，不能完整模拟 TeX 动态 category code；同名控制序列在特殊宏环境中的解释仍以实际 TeX 编译结果为准。
+子文件建议写：
 
-## 来源与许可
+```tex
+% !TeX root = ../main.tex
+```
 
-本仓库保留上游提交历史及作者信息。所包含的 Tree-sitter LaTeX 解析器遵循 [MIT 许可证](parser/latex/LICENSE)。本次检查的上游扩展快照未提供独立 LICENSE 文件，因此本仓库不擅自为全部上游代码重新指定许可证。
+保存文件后再编译。编译器读取磁盘文件；编辑补全与实时诊断读取编辑缓冲区。自定义 `.latexmkrc`、包依赖和编译器选择仍由项目管理。Windows 取消编译会终止工具及其子进程；其他平台终止直接工具进程。
+
+## 开发与验证
+
+```text
+cargo build --locked --target wasm32-wasip2
+node tests/workshop-probe.cjs
+node --liftoff-only tests/grammar-smoke.cjs
+```
+
+语言服务测试需要 TeX Live 工具目录在 PATH，可用 `LATEXMK` 指定 latexmk 可执行文件；`SKIP_TEX_BUILD=1` 仅跳过实际 TeX 编译。语法测试需要 `.dev` 中的 web-tree-sitter 与生成的解析器 WASM。测试只写临时项目，不改个人论文。
+
+接口依据：[Zed 语言扩展](https://zed.dev/docs/extensions/languages)、[Extension API](https://docs.rs/zed_extension_api/0.7.0/zed_extension_api/trait.Extension.html)、[代码片段](https://zed.dev/docs/extensions/snippets)、[任务](https://zed.dev/docs/tasks)、[Workshop 编译](https://github.com/James-Yu/LaTeX-Workshop/wiki/Compile)与[格式化](https://github.com/James-Yu/LaTeX-Workshop/wiki/Format)。Tree-sitter LaTeX 的 MIT 许可证保留在 `parser/latex/LICENSE`。
+## 标准构建与安装边界
+
+Zed 从 manifest 识别 Rust 扩展，调用 PATH 中的 rustc/cargo，构建 wasm32-wasip2，再写出 extension.wasm。Tree-sitter grammar 由 Zed 根据清单的固定 commit 拉取，使用其管理的 WASI SDK 编译。遵循 [官方开发流程](https://zed.dev/docs/extensions/developing-extensions)，无需本项目专用启动器或修改 Zed 全局配置。
+
+本地 ".dev" 只存放开发测试缓存，不参与扩展安装。用户从正常入口启动 Zed，再选择仓库安装开发扩展。初次安装 Rust 后需重启终端和 Zed；若桌面仍继承旧 PATH，可注销再登录 Windows。
+
+语言服务通过 Rust Extension trait 注册；服务源码嵌入 WASM并写入 Zed 分配的扩展工作目录，使用 Worktree 的 PATH 或 Zed Node API启动。这个工作目录方案参考 [Zed Svelte 扩展](https://github.com/zed-extensions/svelte/blob/main/src/svelte.rs)。不安装服务到论文目录，不改写用户设置。编译器/格式化器使用 PATH 或用户显式配置的工具路径，扩展代码不含开发机器路径。
+
+CI 在 Windows/Linux 执行标准 Cargo 构建和无 TeX 的语言服务检查。CI、本地构建、Zed 安装、Zed 内功能验收分别记录，前两项通过不能代替后两项。
+
+## 插件内清理与重试
+
+0.4.4 参照 Workshop 的编译流程实现 latex.autoBuild.cleanAndRetry.enabled，默认 true。插件内手动编译与自动编译使用同一流程：工具步骤失败后清理辅助文件，并将失败步骤重试一次；持续失败仍报错。工具无法启动、用户取消或 PDF 仍不可写时不会清理重试。此实现不再向项目 tasks 注入脚本或编码命令。
+
+打开 TeX 文件，通过代码操作选择 Build LaTeX project 或指定 recipe；选择 Clean LaTeX project 可手动清理。latex.clean.method 当前仅支持 command，默认 latexmk；latex.clean.command 和 latex.clean.args 可配置，默认使用 -outdir=%OUTDIR%、-auxdir=%AUXDIR%、-c、%TEX%。PDF 不在默认清理范围内。清理命令失败会提示，并仍尝试重跑原失败步骤一次。glob 清理、独立 auxDir 和所有 Workshop 清理配置尚未支持。
+
+用户只需要配置工具路径与配方，清理重试默认启用，不必额外配置开关。需要禁用时，在服务 settings 中设置 latex.autoBuild.cleanAndRetry.enabled 为 false。插件服务自行提供编译入口；直接执行 latexmk 的原生任务仍由 latexmk 自身处理，不经过插件。
+
+依据：[Workshop 配置默认值](https://github.com/James-Yu/LaTeX-Workshop/blob/master/package.json)与[失败步骤清理重试实现](https://github.com/James-Yu/LaTeX-Workshop/blob/master/src/compile/plan.ts)。
+
+## 跨设备工具配置
+
+插件内的 Build LaTeX project、recipe 选择与自动编译使用同一编译服务，已自带 PDF 失败恢复，无需复制项目脚本或配置 tasks。原生终端任务仍是独立入口。Node 由 PATH 或 Zed 管理的运行时提供；TeX 发行版与格式化工具需另外安装。
+
+工具从继承的 PATH 和 latex.tools.searchPaths 查找，也支持 latex.tools 中的 command 或格式化器 path 设置为绝对路径。searchPaths 是目录数组，优先于继承 PATH；请填写当前设备实际目录。通过绝对路径找到工具后，服务会把工具所在目录加入本次子进程 PATH，供 latexmk 查找同目录的编译器和参考文献工具。不会修改系统环境变量、Zed 全局设置或项目配置。
+
+例如 Windows 可以在服务 settings 中配置：
+
+```json
+{ "latex.tools.searchPaths": ["C:/texlive/2026/bin/windows"] }
+```
+
+目录仅为示例，以实际安装为准。macOS 可使用实际 MacTeX 工具目录，Linux 可使用发行版提供的 PATH。
+
+## 引用查找与重命名
+
+0.4.2 通过标准 LSP 提供项目依赖范围内的标签和 BibTeX 引用键查找、重命名，支持常见 ref/cite 命令、逗号分隔的引用键及 BibTeX crossref。通过 Zed 的 Find All References / Rename 操作使用，具体键绑定以用户配置为准。会读取未保存的编辑缓冲区，并返回 WorkspaceEdit，由编辑器应用；服务不直接写文件。注释和 TeX verbatim 内容被排除，定义重复或新名称冲突时拒绝重命名。动态生成的键、自定义引用宏、复杂 BibLaTeX 多重引用语法及命令/环境重命名尚不支持。
+
+修改扩展后需在 Zed 重新安装本目录的开发扩展，让嵌入的服务更新；已有论文任务不需要调整。
+
+## 外部编译诊断同步
+
+0.4.3 会监测已打开项目的当前输出目录中的编译日志。日志连续两次检查保持稳定且包含编译结束记录后，更新编译诊断；成功编译会清除前次错误。自动编译关闭时同样生效。生成文件的变化仅更新诊断，不触发新的编译。检测范围由 latex.outDir 和 latex.jobname 决定，外部任务应使用相同配置。此功能不为独立任务与插件编译提供跨进程互斥。
+
+## 0.4.6 构建提示与日志
+
+插件内的代码操作、Code Lens 和自动编译共用构建流程。同一主文件的重复构建请求复用正在执行的编译；同时选择不同配方会提示等待，不会把另一配方误报为已执行。手动构建会取消尚未启动的自动构建定时器。每次构建固定使用启动时的配置，修改设置不会改变正在执行的步骤。
+
+构建前检查项目中已打开的源文件。尚未保存的编辑会提示先保存；外部修改磁盘文件不会被误判为编辑器中未保存的修改。插件不会代替用户保存源文件。
+
+编译失败的提示包含具体原因和日志路径，覆盖 XDV 转换失败、工具无法启动等情况。完整命令、工作目录、工具输出和清理重试记录保存为输出目录中的 `<主文件名>.latex-workshop.log`，每次构建覆盖。通过代码操作 **Show LaTeX build log** 打开。若客户端无法打开，错误提示仍给出路径。
+
+Code Lens 提供 **Build LaTeX project** 和 **Clean LaTeX project**，位于主文件的 documentclass 行或子文件首行。Zed 默认关闭 Code Lens，需要用户通过 `zed: open settings file` 在用户设置的最外层启用；当前版本的项目 `.zed/settings.json` 不允许此字段。插件不会改写设置：
+
+```json
+{ "code_lens": "on" }
+```
+
+也可以设为 `menu`，或继续使用现有代码操作。依据：[Zed Code Lens 设置](https://zed.dev/docs/reference/all-settings#code-lens)。
+
+F4 中直接执行 latexmk 的原生任务仍是独立入口，不会经过插件的互斥、清理重试或上述完整日志。当前 Zed 扩展任务接口不能把本服务的构建命令直接注册为语言服务任务；源码依据与版本边界见 [接口核查](docs/zed-integration.md)。

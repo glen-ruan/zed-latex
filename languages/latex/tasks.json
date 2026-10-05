@@ -4,6 +4,7 @@
     "command": "latexmk",
     "args": [
       "-xelatex",
+      "-cd",
       "-synctex=1",
       "-interaction=nonstopmode",
       "-file-line-error",
@@ -25,6 +26,7 @@
     "command": "latexmk",
     "args": [
       "-xelatex",
+      "-cd",
       "-pvc",
       "-synctex=1",
       "-interaction=nonstopmode",

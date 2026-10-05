@@ -1,19 +1,24 @@
 id = "latex"
-name = "LaTeX — XeLaTeX & expl3"
-version = "0.3.1"
+name = "LaTeX Workshop for Zed"
+version = "0.4.6"
 schema_version = 1
+snippets = ["snippets/latex.json"]
 authors = [
     "Ruben Zukic <ruben@zukic.net>",
     "Oli Callaghan <me@olicallaghan.com>",
     "Luke Naylor <luke.naylr@gmail.com>",
     "Jan Solanti <jhs@psonet.com>",
 ]
-description = "LaTeX support with XeLaTeX tasks and expl3 command highlighting."
+description = "Workshop-style editing, recipes, root discovery and XeLaTeX builds for Zed."
 repository = "https://github.com/glen-ruan/zed-latex"
 
-[language_servers.texlab]
-name = "TexLab (Latex Language Server)"
-language = "LaTeX"
+[language_servers.latex-workshop]
+name = "LaTeX Workshop companion"
+languages = ["LaTeX", "BibTeX"]
+
+[language_servers.latex-workshop.language_ids]
+LaTeX = "latex"
+BibTeX = "bibtex"
 
 [grammars.bibtex]
 repository = "https://github.com/latex-lsp/tree-sitter-bibtex"
@@ -23,3 +28,8 @@ commit = "ccfd77db0ed799b6c22c214fe9d2937f47bc8b34"
 repository = "https://github.com/glen-ruan/zed-latex"
 commit = "33517da106283e03bc89d179881923643e0e6939"
 path = "parser/latex"
+
+[grammars.bibtex_style]
+repository = "https://github.com/glen-ruan/zed-latex"
+commit = "7bfcc72308be076c6d79d32a157f273ade691e1d"
+path = "parser/bibtex_style"

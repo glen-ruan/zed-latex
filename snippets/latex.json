@@ -1,0 +1,69 @@
+{
+  "Environment": {
+    "prefix": "env",
+    "body": [
+      "\\begin{${1:environment}}",
+      "\t$0",
+      "\\end{$1}"
+    ],
+    "description": "Insert a paired LaTeX environment"
+  },
+  "Section": {
+    "prefix": "sec",
+    "body": [
+      "\\section{${1:Title}}",
+      "\\label{sec:${2:key}}",
+      "$0"
+    ]
+  },
+  "Subsection": {
+    "prefix": "subsec",
+    "body": [
+      "\\subsection{${1:Title}}",
+      "\\label{subsec:${2:key}}",
+      "$0"
+    ]
+  },
+  "Figure": {
+    "prefix": "fig",
+    "body": [
+      "\\begin{figure}[${1:htbp}]",
+      "\t\\centering",
+      "\t\\includegraphics[width=${2:0.8}\\linewidth]{${3:file}}",
+      "\t\\caption{${4:Caption}}",
+      "\t\\label{fig:${5:key}}",
+      "\\end{figure}",
+      "$0"
+    ]
+  },
+  "Equation": {
+    "prefix": "eq",
+    "body": [
+      "\\begin{equation}",
+      "\t${1:expression}",
+      "\t\\label{eq:${2:key}}",
+      "\\end{equation}",
+      "$0"
+    ]
+  },
+  "Itemize": {
+    "prefix": "itemize",
+    "body": [
+      "\\begin{itemize}",
+      "\t\\item $0",
+      "\\end{itemize}"
+    ]
+  },
+  "Cite": {
+    "prefix": "cite",
+    "body": "\\cite{${1:key}}$0"
+  },
+  "Reference": {
+    "prefix": "ref",
+    "body": "\\ref{${1:label}}$0"
+  },
+  "Input": {
+    "prefix": "input",
+    "body": "\\input{${1:file}}$0"
+  }
+}

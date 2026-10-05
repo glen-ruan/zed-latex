@@ -1,3 +1,49 @@
+# Changelog
+
+## 0.4.6
+
+- Add standard LSP build/clean Code Lens and a Show LaTeX build log action. Code Lens display requires the user's Zed code_lens setting.
+- Persist complete build output, commands and retry records; include concrete converter/tool failures in messages and diagnostics.
+- Guard unsaved source edits without blocking external disk changes; cancel pending automatic builds on manual build and snapshot each job's configuration.
+- Verify duplicate build coalescing and reject conflicting recipe requests. Native terminal tasks remain independent of the plugin pipeline.
+
+## 0.4.5
+
+- Request the full Zed workspace configuration instead of a nonexistent latex-workshop section. Preserve Zed auto-build overrides over imported VS Code settings; ignore null configuration responses.
+- Verify saved-file incremental builds without cleanup and configuration precedence after initialization.
+
+## 0.4.4
+
+- Fix project discovery with empty workspaceFolders; fall back to rootUri, rootPath or the language-server working directory.
+
+- Move recovery into the plugin build pipeline: support Workshop cleanAndRetry.enabled and command-based cleanup, retry a failed tool step once, and add Clean LaTeX project.
+- Keep PDF lock detection, cancellation, final diagnostics and normal incremental compilation. Remove project-task wrapper examples and obsolete tests.
+
+## 0.4.3
+
+- Synchronize diagnostics from completed external compiler logs, including with auto-build disabled; ignore incomplete logs and clear stale errors after successful native tasks.
+
+## 0.4.2
+
+- Add project references and rename for labels and bibliography keys, including BibTeX crossref, through standard LSP edits. Reject duplicate definitions and conflicting keys.
+- Add portable external-tool discovery and configurable search directories, preserving user settings and inherited environment.
+
+## 0.4.1
+
+
+- Add an independent BST grammar and Workshop-style highlighting, function outline, folds and indentation.
+- Keep BST strings isolated from TeX injections and language-server diagnostics.
+
+
+## 0.4.0
+
+- Replace TexLab integration with an embedded Node companion using Workshop-style recipes, tool arguments/environment/cwd, root comments and dependency discovery.
+- Add project completion/definitions, section symbols, syntax and compiler diagnostics, debounced automatic builds, build recipe code actions and formatting adapters.
+- Default to XeLaTeX + latexmk with build output; preserve DOC versus DOC_EXT placeholder semantics.
+- Add snippets, environment/group indentation, macro outline queries and an explicit plain-text BibTeX Style language.
+- Keep PDF preview and SyncTeX integration out of this iteration. Document incomplete Workshop parity and external dependencies.
+- Add isolated multi-file LSP/TeX integration checks and parser smoke checks.
+
 # 更新记录
 
 ## 0.3.1

@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {spawnSync}=require('node:child_process');
+const tools=require('../server/tools.cjs');
+fs.mkdirSync(path.resolve(".dev"),{recursive:true});
+const root=fs.mkdtempSync(path.resolve('.dev/tool paths '));
+const executable=path.join(root,path.basename(process.execPath));fs.copyFileSync(process.execPath,executable);fs.chmodSync(executable,0o755);
+const base={...process.env};for(const key of Object.keys(base))if(key.toLowerCase()==='path')delete base[key];base.PATH='';
+const named=tools.launch(path.basename(executable),{base,directories:[root]});assert.equal(named.command,executable);
+const explicit=tools.launch(executable,{base});assert.equal(explicit.env.PATH.split(path.delimiter)[0],root);
+// An executable configured by absolute path can find sibling tools without a system PATH.
+const result=spawnSync(explicit.command,['-e','const c=require("node:child_process").spawnSync(process.argv[1],["--version"]);process.stdout.write(c.stdout);process.exit(c.status ?? 1)',path.basename(executable)],{env:explicit.env,encoding:'utf8'});
+assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/v\d+/);
+const win=tools.environment({Path:'old',PATH:'second',KEEP:'yes'},{pAtH:'override'},['tools'],'win32');assert.equal(win.PATH,'tools;override');assert.equal(Object.keys(win).filter(k=>k.toLowerCase()==='path').length,1);assert.equal(win.KEEP,'yes');
+assert.throws(()=>tools.launch('missing-tool-unique',{base}),/Install the tool/);
+assert.throws(()=>tools.launch('missing-tool-unique',{directories:'bad'}),/array/);
+fs.rmSync(root,{recursive:true,force:true});
+console.log('PASS tool discovery: search directories, absolute paths, sibling tools, Windows PATH casing, missing-tool guidance');

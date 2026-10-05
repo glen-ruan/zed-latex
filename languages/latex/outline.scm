@@ -60,3 +60,12 @@
   !toc
   text: _ @name) @item
 
+
+; Smaller document headings and template definitions
+(paragraph command: _ @context !toc text: _ @name) @item
+(paragraph command: _ @context toc: _ @name) @item
+(subparagraph command: _ @context !toc text: _ @name) @item
+(subparagraph command: _ @context toc: _ @name) @item
+(new_command_definition command: _ @context declaration: _ @name) @item
+(old_command_definition command: _ @context declaration: _ @name) @item
+(environment_definition command: _ @context name: _ @name) @item

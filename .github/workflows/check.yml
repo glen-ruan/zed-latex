@@ -1,0 +1,31 @@
+name: Check extension
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build Zed extension WASM
+        run: cargo build --locked --target wasm32-wasip2
+      - name: Check companion service
+        run: node tests/workshop-probe.cjs
+        env:
+          SKIP_TEX_BUILD: '1'
+      - name: Check PDF recovery
+        run: node tests/recovery-probe.cjs
+      - name: Check tool discovery
+        run: node tests/tools-probe.cjs
+      - name: Check reference edits
+        run: node tests/references-probe.cjs
