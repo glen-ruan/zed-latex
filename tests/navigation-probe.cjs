@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),core=require('../server/core.cjs');
 const temporary=!process.env.NUAA_PROJECT,base=path.resolve('.dev');fs.mkdirSync(base,{recursive:true});const root=temporary?fs.mkdtempSync(path.join(base,'navigation ')):path.resolve(process.env.NUAA_PROJECT),main=path.join(root,'master.tex');
-if(temporary){fs.mkdirSync(path.join(root,'template'));fs.mkdirSync(path.join(root,'bib'));fs.writeFileSync(main,String.raw`\documentclass{local}\renewcommand\nuaanotation[2]{#1#2}\makecover\makedeclare\makeabstract\nuaanotation{x}\optional[option]{x}\rpm\copied\argmax\bibliographystyle{bib/masterbib}`);fs.writeFileSync(path.join(root,'local.cls'),String.raw`\InputIfFileExists{template/front.def}{}{}`);fs.writeFileSync(path.join(root,'template/front.def'),String.raw`% Public cover entry
+if(temporary){fs.mkdirSync(path.join(root,'template'));fs.mkdirSync(path.join(root,'bib'));fs.writeFileSync(main,String.raw`\documentclass{local}\renewcommand\nuaanotation[2]{#1#2}\makecover\makedeclare\makeabstract\nuaanotation{x}\optional[option]{x}\rpm\copied\argmax\bibliographystyle{bib/masterbib}\modernrows*[note]{rows.tex}\modernenv[Claim]{claim}\begin{claim}`);fs.writeFileSync(path.join(root,'local.cls'),String.raw`\InputIfFileExists{template/front.def}{}{}`);fs.writeFileSync(path.join(root,'template/front.def'),String.raw`% Public cover entry
 \def\makecover{cover}
 \newcommand\makedeclare{declare}
 \newcommand\makeabstract{abstract}
@@ -10,7 +10,7 @@ if(temporary){fs.mkdirSync(path.join(root,'template'));fs.mkdirSync(path.join(ro
 \DeclareSIUnit{\rpm}{rpm}
 \let\saved=\makecover
 \NewCommandCopy{\copied}{\saved}
-\DeclareMathOperator*{\argmax}{arg\,max}`);fs.writeFileSync(path.join(root,'bib/masterbib.bst'),'ENTRY {} {} {}');}
+\DeclareMathOperator*{\argmax}{arg\,max}\NewDocumentCommand\modernrows{s O{default} m}{\innerrows{#3}}\newcommand\innerrows[1]{\input{#1}}\NewDocumentCommand\modernenv{O{Theorem} m}{\innerenv{#2}{#1}}\newcommand\innerenv[2]{\newtheorem{#1}{#2}}`);fs.writeFileSync(path.join(root,'rows.tex'),'Rows');fs.writeFileSync(path.join(root,'bib/masterbib.bst'),'ENTRY {} {} {}');}
 const source=fs.readFileSync(main,'utf8'),original=fs.readFileSync(main);const child=spawn(process.execPath,[path.resolve('server/server.cjs')]);let buffer=Buffer.alloc(0),id=0;const pending=new Map();
 function send(message){const data=Buffer.from(JSON.stringify({jsonrpc:'2.0',...message}));child.stdin.write('Content-Length: '+data.length+'\r\n\r\n');child.stdin.write(data);}
 function request(method,params){return new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});send({id:n,method,params});});}
@@ -23,7 +23,9 @@ child.stderr.on('data',data=>process.stderr.write(data));const timer=setTimeout(
  const offset=source.indexOf('bib/masterbib'),defs=await request('textDocument/definition',{textDocument:{uri:core.uri(main)},position:core.position(source,offset+5)});assert.equal(core.key(core.file(defs[0].uri)),core.key(path.join(root,'bib/masterbib.bst')));
 
 
- if(temporary){const position=core.position(source,source.indexOf('\\copied')+3),hover=await request('textDocument/hover',{textDocument:{uri:core.uri(main)},position});assert(hover.contents.value.includes('\\copied → \\saved → \\makecover'));
+ if(temporary){const rowsAt=source.indexOf('rows.tex')+2,textDocument={uri:core.uri(main)};const targets=await request('textDocument/definition',{textDocument,position:core.position(source,rowsAt)});assert.equal(core.key(core.file(targets[0].uri)),core.key(path.join(root,'rows.tex')));const envAt=source.lastIndexOf('{claim}')+3,envTargets=await request('textDocument/definition',{textDocument,position:core.position(source,envAt)});assert.equal(core.offset(source,envTargets[0].range.start),source.indexOf('{claim}')+1);
+ const partial=source+'\n\\modernrows*[note]{ro';send({method:'textDocument/didChange',params:{textDocument:{uri:core.uri(main),version:2},contentChanges:[{text:partial}]}});const rowItems=await request('textDocument/completion',{textDocument,position:core.position(partial,partial.length)});assert(rowItems.some(item=>item.label==='rows'));
+ const position=core.position(source,source.indexOf('\\copied')+3),hover=await request('textDocument/hover',{textDocument:{uri:core.uri(main)},position});assert(hover.contents.value.includes('\\copied → \\saved → \\makecover'));
   async function items(prefix){const text=source+'\n\\'+prefix;send({method:'textDocument/didChange',params:{textDocument:{uri:core.uri(main),version:2},contentChanges:[{text}]}});return request('textDocument/completion',{textDocument:{uri:core.uri(main)},position:core.position(text,text.length)});}
   const unit=(await items('rp')).find(item=>item.label==='\\rpm');assert(unit?.documentation.value.includes('单位内容：rpm'));
   const copy=(await items('cop')).find(item=>item.label==='\\copied');assert.equal(copy.insertText,'copied');assert(copy.documentation.value.includes('静态复制来源'));

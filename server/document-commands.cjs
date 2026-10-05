@@ -25,7 +25,7 @@ function definition(text,start){
  const spec=group(text,cursor);if(!spec)return null;
  const body=group(text,spec.next);if(!body)return null;
  const ending=environment?group(text,body.next):null;if(environment&&!ending)return null;
- return {name,environment,start,nameStart,nameEnd,end:ending?.next||body.next,spec:spec.value};
+ return {name,environment,start,nameStart,nameEnd,end:ending?.next||body.next,spec:spec.value,body};
 }
 function scan(text){
  const found=[],tokens=/\\[A-Za-z]+/g;let match;
