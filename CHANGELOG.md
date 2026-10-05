@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.9
+
+- Show usage signatures and short explanations when hovering supported LaTeX commands, independently of reference-key previews.
+- Show argument counts and optional first arguments for project newcommand-style definitions, giving local overrides precedence over built-in help.
+- Verify cite/frac usage, custom optional arguments, comment exclusion and preserved bibliography metadata through LSP.
+
 ## 0.4.8
 
 - Add reference hover previews with label source context and bibliography title, author/editor, year/date, publication and DOI fields.

@@ -33,6 +33,8 @@ impl zed::Extension for LatexExtension {
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("hover.cjs"), include_str!("../server/hover.cjs"))
             .map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("command-help.cjs"), include_str!("../server/command-help.cjs"))
+            .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("core.cjs"), include_str!("../server/core.cjs"))
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("tools.cjs"), include_str!("../server/tools.cjs"))

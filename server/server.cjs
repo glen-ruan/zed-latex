@@ -10,6 +10,7 @@ const tools=require('./tools.cjs');
 const references=require('./references.cjs');
 const completion=require('./completion.cjs');
 const preview=require('./hover.cjs');
+const commandHelp=require('./command-help.cjs');
 const texCatalog=new Map();
 const logSync=new (require('./log-sync.cjs').LogSync)();
 const diagnosticFiles=new Map();
@@ -200,6 +201,10 @@ function definition(url,pos){
   const idx=projectIndex(core.file(url)),name=symbolAt(url,pos),entry=idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
 }
 function hover(url,pos){
+  const command=commandHelp.at(text(url),pos);
+  if(command){const idx=projectIndex(core.file(url)),entry=idx.commands.get(command.name);if(entry){const source=core.read(entry.file,docs),signature=commandHelp.custom(command.name,source,entry);return {range:command.range,contents:{kind:'plaintext',value:(signature||'\\'+command.name)+'\n自定义命令\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)}};}
+    const help=commandHelp.HELP[command.name];if(help)return {range:command.range,contents:{kind:'plaintext',value:help[0]+'\n\n'+help[1]}};
+  }
   const reference=referenceTarget(url,pos);
   if(reference){const {target,definitions}=reference;if(!definitions.length)return null;if(definitions.length>1)return {range:target.range,contents:{kind:'plaintext',value:target.name+' — multiple definitions\n'+definitions.map(item=>item.file+':'+(item.range.start.line+1)).join('\n')}};
     const entry=definitions[0],source=core.read(entry.file,docs),where=entry.file+':'+(entry.range.start.line+1);let value;
@@ -299,7 +304,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.8'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.9'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

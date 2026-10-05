@@ -58,3 +58,6 @@ The stdio protocol harness verifies progress begin/report/end, success/failure/c
 ## 0.4.8 verification (2026-10-05)
 
 Standard WASM build and stdio protocol checks passed for reference context and citation metadata hovers, exact definition ranges, same-key label/citation disambiguation and comment exclusion. Existing reference/rename checks passed; a braced BibTeX field containing a literal quote and apparent author field no longer swallows the next entry or replaces the real author in the hover preview. Native hover rendering remains a separate acceptance check. Compiler and automatic-build scheduling were not changed.
+## 0.4.9 verification (2026-10-05)
+
+Standard WASM build and stdio checks passed for command-token usage help, reference-key metadata, custom first-optional argument signatures and comment exclusion. The live extension index had no latex entry and the former runtime directory was absent during inspection, so the screenshot's exact running service version could not be confirmed. Native command hover rendering remains a separate acceptance check.
