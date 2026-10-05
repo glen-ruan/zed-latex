@@ -14,16 +14,22 @@ function context(files,folders,docs){
   for(const match of source.matchAll(/\\(?:documentclass|LoadClass)(?:WithOptions)?\s*(?:\[[^\]]*\])?\s*\{([^{}]+)\}/g)){const target=local.get(match[1].trim()+'.cls');if(target)queue.push(target);}
  }
  for(const [name,options] of passed)if(selected.has(name))for(const option of options)selected.get(name).add(option);
- const pending=[...selected.keys()];for(let cursor=0;cursor<pending.length;cursor++){const name=pending[cursor],record=data.packages[name];if(!record)continue;for(const dep of record.deps||[]){if(!dep.name)continue;if(dep.options?.length&&!dep.options.every(option=>selected.get(name)?.has(option)))continue;if(!selected.has(dep.name)){selected.set(dep.name,new Set());pending.push(dep.name);}}}
+ const pending=[...selected.keys()];for(let cursor=0;cursor<pending.length;cursor++){const name=pending[cursor],record=data.packages[name];if(!record)continue;for(const dep of record.deps||[]){if(!dep.name)continue;if(dep.if&&!(typeof dep.if==='string'&&[...(selected.get(name)||[])].some(option=>option.replace(/\s*=\s*/g,'=')===dep.if.replace(/\s*=\s*/g,'='))))continue;if(dep.options?.length&&!dep.options.every(option=>selected.get(name)?.has(option)))continue;if(!selected.has(dep.name)){selected.set(dep.name,new Set());pending.push(dep.name);}}}
  const commands=new Map(),environments=new Map(),keys=new Map();
  for(const name of selected.keys()){
   const record=data.packages[name];if(!record)continue;
   for(const macro of record.macros||[]){if(macro.unusual||!/^\w[\w@:*]*$/.test(macro.name))continue;const snippet=cleanSnippet(macro.arg?.snippet||macro.name),signature='\\'+plain(snippet);let entry=commands.get(macro.name);if(!entry){entry={name:macro.name,package:name,snippet,signature,variants:[],description:typeof macro.doc==='string'?macro.doc:typeof macro.detail==='string'?macro.detail:''};commands.set(macro.name,entry);}if(!entry.variants.includes(signature))entry.variants.push(signature);if(macro.arg?.snippet&&(!entry.hasArgs||(macro.arg.format||'').includes('[')===false&&entry.optional)){entry.snippet=snippet;entry.signature=signature;entry.hasArgs=true;entry.optional=(macro.arg.format||'').includes('[');}}
   for(const env of record.envs||[])if(env.name)environments.set(env.name,{name:env.name,package:name});
-  for(const [command,values] of Object.entries(record.keys||{}))if(Array.isArray(values))keys.set(command,[...new Set([...(keys.get(command)||[]),...values.filter(value=>typeof value==='string')])]);
+  for(const [command,values] of Object.entries(record.keys||{}))if(Array.isArray(values))for(const alias of command.split(',').map(value=>value.replace(/#c$/,'').trim()))keys.set(alias,[...new Set([...(keys.get(alias)||[]),...values.filter(value=>typeof value==='string')])]);
  }
  return {packages:selected,packageCommands:commands,packageEnvironments:environments,packageKeys:keys,localFiles};
 }
 const REQUIRED={eqref:'amsmath',autoref:'hyperref',cref:'cleveref',Cref:'cleveref',citep:'natbib',citet:'natbib',textcite:'biblatex',parencite:'biblatex',addbibresource:'biblatex',printbibliography:'biblatex',includegraphics:'graphicx',operatorname:'amsopn',mathbb:'amsfonts'};
 const REQUIRED_ENVS={align:'amsmath','align*':'amsmath',gather:'amsmath','gather*':'amsmath','equation*':'amsmath',matrix:'amsmath',pmatrix:'amsmath',bmatrix:'amsmath'};
-module.exports={context,plain,cleanSnippet,REQUIRED,REQUIRED_ENVS};
+function optionValues(values,prefix){
+ const equal=prefix.indexOf('=');if(equal<0)return null;
+ const key=prefix.slice(0,equal).trim(),valuePrefix=prefix.slice(equal+1).trimStart();const choices=new Set();
+ for(const value of values){if(value.slice(0,value.indexOf('=')).trim()!==key)continue;const choice=/\$\{\d+\|([^{}]*)\|\}/.exec(value.slice(value.indexOf('=')+1));if(choice)for(const option of choice[1].split(','))if(option&&!/\$|[{}]/.test(option))choices.add(option);}
+ return {key,prefix:valuePrefix,values:[...choices].filter(value=>value.toLowerCase().startsWith(valuePrefix.toLowerCase()))};
+}
+module.exports={context,plain,cleanSnippet,optionValues,REQUIRED,REQUIRED_ENVS};

@@ -183,7 +183,16 @@ function commandInfo(name,idx){
 async function completions(url,pos){
   const source=text(url),end=core.offset(source,pos),before=core.mask(source.slice(0,end)),filename=core.file(url),idx=projectIndex(filename);
   const options=/\\([A-Za-z]+)\*?\s*\[([^\]]*)$/.exec(before);
-  if(options&&!/[\\{}]/.test(options[2].split(',').at(-1))){const prefix=options[2].split(',').at(-1).trimStart(),editRange=core.range(source,end-prefix.length,end),snippets=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport;return (idx.packageKeys.get('\\'+options[1])||[]).filter(value=>packageData.plain(value).toLowerCase().startsWith(prefix.toLowerCase())).map(value=>({label:packageData.plain(value),kind:10,detail:options[1]+' option',textEdit:{range:editRange,newText:snippets?packageData.cleanSnippet(value):value.split('=')[0]+(value.includes('=')?'=':'')},...(snippets?{insertTextFormat:2}:{})}));}
+  if(options&&!/[\\{}]/.test(options[2].split(',').at(-1))){
+    const prefix=options[2].split(',').at(-1).trimStart(),snippets=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport;
+    let values=idx.packageKeys.get('\\'+options[1])||[];
+    if(/^(?:usepackage|RequirePackage)$/.test(options[1])){const following=/^[^\]]*\]\s*\{([^{}]+)\}/.exec(source.slice(end));values=following?following[1].split(',').flatMap(name=>idx.packageKeys.get('\\usepackage/'+name.trim())||[]):[];}
+    const right=/^[^,\]{}\\]*/.exec(source.slice(end))?.[0]||'',optionEnd=end+right.trimEnd().length;
+    const choices=packageData.optionValues(values,prefix);
+    if(choices)return choices.values.map((value,i)=>({label:value,kind:12,detail:choices.key+' value',sortText:String(i).padStart(5,'0'),textEdit:{range:core.range(source,end-choices.prefix.length,optionEnd),newText:value}}));
+    const editRange=core.range(source,end-prefix.length,optionEnd);
+    return values.filter(value=>packageData.plain(value).toLowerCase().startsWith(prefix.toLowerCase())).map(value=>({label:packageData.plain(value),kind:10,detail:options[1]+' option',sortText:packageData.plain(value).toLowerCase(),textEdit:{range:editRange,newText:snippets?packageData.cleanSnippet(value):value.split('=')[0]+(value.includes('=')?'=':'')},...(snippets?{insertTextFormat:2}:{})}));
+  }
   const match=/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\s*\{([^{}]*)$/.exec(before);
   if(match){
     const command=match[1],prefix=match[2].split(',').at(-1).trimStart();let entries=[];
@@ -197,7 +206,8 @@ async function completions(url,pos){
   }
   const prefix=/\\([A-Za-z@_:]*\*?)$/.exec(before)?.[1];if(prefix===undefined)return [];
   const names=[...new Set([...COMMANDS,...Object.keys(commandHelp.HELP)].filter(name=>!packageData.REQUIRED[name]||idx.packages.has(packageData.REQUIRED[name])).concat([...idx.packageCommands.keys(),...idx.commands.keys()]))];
-  return names.filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase())).map(name=>{const info=commandInfo(name,idx),snippet=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport&&info?.snippet;return {label:'\\'+name,kind:3,insertText:snippet||name,...(info?{detail:info.signature,documentation:{kind:'plaintext',value:info.documentation}}:{}),...(snippet?{insertTextFormat:2}:{})};});
+  const matches=names.filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase()));const rank=name=>(name===prefix?0:10)+(idx.commands.has(name)?0:idx.packageCommands.has(name)?1:2);matches.sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
+  return matches.map(name=>{const info=commandInfo(name,idx),snippet=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport&&info?.snippet;return {label:'\\'+name,kind:3,sortText:String(rank(name)).padStart(3,'0')+'-'+name.toLowerCase(),insertText:snippet||name,...(info?{detail:info.signature,documentation:{kind:'plaintext',value:info.documentation}}:{}),...(snippet?{insertTextFormat:2}:{})};});
 }
 function symbolAt(url,pos){
   const source=text(url),end=core.offset(source,pos),before=source.slice(0,end),after=source.slice(end);
@@ -318,7 +328,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.14'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.15'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

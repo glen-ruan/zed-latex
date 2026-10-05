@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.15
+
+- Expand the bundled Workshop catalog from 32 to 51 records at the same pinned revision, with the existing MIT license.
+- Respect literal conditional dependency options instead of enabling all deps.if records unconditionally.
+- Normalize combined option-key aliases; add package option completion when the package name is present after the bracket, and simple enum value completion with precise suffix replacement.
+- Rank exact command matches first, followed by project custom commands, loaded-package commands and basic commands; provide stable sortText and bracket/equal completion triggers.
+- Preserve the pending native Zed verification status of 0.4.14.
+
+
 ## 0.4.14
 
 - Track TeX source-file contexts and following l.N lines for traditional errors; join multi-line package warnings and resolve paths against the build working directory.
