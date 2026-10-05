@@ -48,4 +48,9 @@ function card(signature,description,source,where,notice='',variants=[]){
  return parts.join('\n\n');
 }
 function content(plain,markdown,formats){return formats?.includes('markdown')?{kind:'markdown',value:markdown}:{kind:'plaintext',value:plain};}
-module.exports={bibliography,context,escapeMarkdown,code,prose,declaration,card,content};
+function fileCard(name,where,source,language='latex'){
+ const parts=['**文件**\n\n'+code(name,'text'),'**位置**\n\n'+code(where,'text')];
+ if(source)parts.push('**源码预览**\n\n'+code(source,language));
+ return parts.join('\n\n');
+}
+module.exports={fileCard,bibliography,context,escapeMarkdown,code,prose,declaration,card,content};
