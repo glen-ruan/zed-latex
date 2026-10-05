@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.8
+
+- Add reference hover previews with label source context and bibliography title, author/editor, year/date, publication and DOI fields.
+- Resolve labels and bibliography keys by reference type and return exact definition-key ranges; return all matching definitions when ambiguous.
+- Keep comments/verbatim out of definition lookup and handle literal quotes inside braced BibTeX fields without swallowing subsequent entries.
+
 ## 0.4.7
 
 - Add capability-gated LSP work-done progress, recipe/step feedback, elapsed time, build-state lenses and project-scoped cancellation. Manual builds report successful completion; finished lenses link to the log.

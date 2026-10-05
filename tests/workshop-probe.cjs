@@ -20,6 +20,9 @@ function unit(){
  assert.equal(core.mask('% \\section{hidden}\n\\section{shown}').split('\n')[0].trim(),'');
  const symbols=core.symbols('\\section{One}\n\\subsection{Child}\n\\section{Two}');assert.equal(symbols.length,2);assert.equal(symbols[0].children[0].name,'Child');
  const cfg=core.settings({'latex.recipes':[{name:'sequence',tools:['one','two']}],'latex.tools':[{name:'one',command:'echo',args:['%DOC_EXT%'],cwd:'%DIR%'},{name:'two',command:'echo',args:['%DOCFILE%']}]});const r=core.recipe(main,cfg,root);assert.equal(r.steps.length,2);assert.equal(r.steps[0].cwd,root);assert.equal(r.steps[1].args[0],'main');
+ const quotedBib='@book{quoted,title={A " sign {Nested}, author={Fake}},author={Real Author},year={2026}}\n@book{next,title="Next"}';
+ const displayed=require('../server/hover.cjs').bibliography(quotedBib,quotedBib.indexOf('quoted'));assert.equal(displayed.fields.author,'Real Author');assert(displayed.fields.title.includes('author={Fake}'));
+ const quotedFile=path.join(root,'quoted.bib');fs.writeFileSync(quotedFile,quotedBib);const quoteDefinitions=require('../server/references.cjs').occurrences([quotedFile]).filter(item=>item.declaration);assert.deepEqual(quoteDefinitions.map(item=>item.name),['quoted','next']);fs.unlinkSync(quotedFile);
  console.log('PASS core: roots, cycles, ambiguity, placeholders, recipes, indexing, structure, syntax');
 }
 unit();
@@ -55,6 +58,13 @@ function change(file,source,version){send({method:'textDocument/didChange',param
  const ref=await request('textDocument/completion',{textDocument:{uri:core.uri(chapter)},position:core.position(src,src.indexOf('sec:}')+4)});assert(ref.some(x=>x.label==='sec:test'));
  const cite=await request('textDocument/completion',{textDocument:{uri:core.uri(chapter)},position:core.position(src,src.lastIndexOf('sa}')+2)});assert(cite.some(x=>x.label==='sample'));
  const def=await request('textDocument/definition',{textDocument:{uri:core.uri(chapter)},position:core.position(base,base.indexOf('sec:test')+3)});assert.equal(core.key(core.file(def[0].uri)),core.key(main));
+ const referenceHover=await request('textDocument/hover',{textDocument:{uri:core.uri(chapter)},position:core.position(base,base.indexOf('sec:test')+3)});assert(referenceHover.contents.value.includes('sec:test'));assert(referenceHover.contents.value.includes('\\label{sec:test}'));
+ const mainBase=fs.readFileSync(main,'utf8');change(main,mainBase+'\n\\label{sample}',2);const hoverSource=base+'\n\\cite{sample}\n\\ref{sample}\n% \\cite{sample}';change(chapter,hoverSource,2);
+ const citePosition=core.position(hoverSource,hoverSource.indexOf('cite{sample}')+6);const citationDefinition=await request('textDocument/definition',{textDocument:{uri:core.uri(chapter)},position:citePosition});assert.equal(core.key(core.file(citationDefinition[0].uri)),core.key(bib));assert.equal(citationDefinition[0].range.end.character-citationDefinition[0].range.start.character,'sample'.length);
+ const citationHover=await request('textDocument/hover',{textDocument:{uri:core.uri(chapter)},position:citePosition});assert(citationHover.contents.value.includes('Sample'));assert(citationHover.contents.value.includes('Test Author'));assert(citationHover.contents.value.includes('2026'));
+ const sameLabel=await request('textDocument/definition',{textDocument:{uri:core.uri(chapter)},position:core.position(hoverSource,hoverSource.indexOf('ref{sample}')+5)});assert.equal(core.key(core.file(sameLabel[0].uri)),core.key(main));
+ assert.equal(await request('textDocument/hover',{textDocument:{uri:core.uri(chapter)},position:core.position(hoverSource,hoverSource.lastIndexOf('cite{sample}')+6)}),null);
+ change(main,mainBase,3);change(chapter,src,2);console.log('PASS hover/navigation: source context, citation metadata, precise key ranges, same-key type separation and comment exclusion');
  const sym=await request('textDocument/documentSymbol',{textDocument:{uri:core.uri(main)}});assert.equal(sym[0].name,'Test');
  const actions=await request('textDocument/codeAction',{textDocument:{uri:core.uri(chapter)},range:core.range(base,0),context:{diagnostics:[]}});assert(actions.some(x=>x.command.command==='latex-workshop.build'));assert(actions.some(x=>x.command.command==='latex-workshop.clean'));
  const lens=await request('textDocument/codeLens',{textDocument:{uri:core.uri(main)}});assert.equal(lens.length,2);assert.equal(lens[0].command.command,'latex-workshop.build');assert.equal(lens[0].range.start.line,0);

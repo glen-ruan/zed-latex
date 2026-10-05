@@ -9,6 +9,7 @@ const report=require('./build-report.cjs');
 const tools=require('./tools.cjs');
 const references=require('./references.cjs');
 const completion=require('./completion.cjs');
+const preview=require('./hover.cjs');
 const texCatalog=new Map();
 const logSync=new (require('./log-sync.cjs').LogSync)();
 const diagnosticFiles=new Map();
@@ -187,7 +188,28 @@ function symbolAt(url,pos){
   const left=/[^{}\s,\\]*$/.exec(before)[0],right=/^[^{}\s,\\]*/.exec(after)[0];
   return left+right;
 }
-function definition(url,pos){let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root);if(files.length)return files;const idx=projectIndex(core.file(url)),name=symbolAt(url,pos);const entry=idx.labels.get(name)||idx.citations.get(name)||idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];}
+function referenceTarget(url,pos){
+  const filename=core.file(url);let files;try{files=[...core.dependencies(resolveRoot(filename),docs)];}catch{return null;}
+  const items=references.occurrences(files,docs),target=references.at(items,filename,pos);if(!target)return null;
+  return {target,definitions:items.filter(item=>item.declaration&&item.name===target.name&&item.kind===target.kind)};
+}
+function definition(url,pos){
+  const source=text(url),at=core.offset(source,pos),span=source.slice(Math.max(0,at-1),at+1);if(core.mask(source).slice(Math.max(0,at-1),at+1)!==span)return [];
+  let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root);if(files.length)return files;
+  const reference=referenceTarget(url,pos);if(reference)return reference.definitions.map(item=>({uri:core.uri(item.file),range:item.range}));
+  const idx=projectIndex(core.file(url)),name=symbolAt(url,pos),entry=idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
+}
+function hover(url,pos){
+  const reference=referenceTarget(url,pos);
+  if(reference){const {target,definitions}=reference;if(!definitions.length)return null;if(definitions.length>1)return {range:target.range,contents:{kind:'plaintext',value:target.name+' — multiple definitions\n'+definitions.map(item=>item.file+':'+(item.range.start.line+1)).join('\n')}};
+    const entry=definitions[0],source=core.read(entry.file,docs),where=entry.file+':'+(entry.range.start.line+1);let value;
+    if(target.kind==='citation'){const bib=preview.bibliography(source,core.offset(source,entry.range.start));const fields=bib?.fields||{};value=[target.name+(bib?' ('+bib.type+')':''),fields.title,fields.author||fields.editor,fields.year||fields.date,fields.journal||fields.booktitle||fields.publisher,fields.doi?'DOI: '+fields.doi:undefined,where].filter(Boolean).join('\n');}
+    else value=target.name+'\n'+where+'\n\n'+preview.context(source,entry.range.start.line);
+    return {range:target.range,contents:{kind:'plaintext',value}};
+  }
+  const entry=definition(url,pos)[0];if(!entry)return null;const file=core.file(entry.uri);return {contents:{kind:'plaintext',value:symbolAt(url,pos)+' — '+file+':'+(entry.range.start.line+1)+'\n\n'+preview.context(core.read(file,docs),entry.range.start.line)}};
+}
+
 function bibFormat(source,spaces){
   // Preserve comments, braced/quoted values and string expressions verbatim.
   let result='',cursor=0;
@@ -277,7 +299,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.7'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.8'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.
@@ -314,7 +336,7 @@ async function handle(method,params){
   }
   if(method==='textDocument/hover'){
 
-    const entry=definition(params.textDocument.uri,params.position)[0];return entry?{contents:{kind:'plaintext',value:symbolAt(params.textDocument.uri,params.position)+' — '+core.file(entry.uri)}}:null;
+    return hover(params.textDocument.uri,params.position);
   }
   if(method==='workspace/symbol')return workspaceSymbols(params.query);
   if(method==='textDocument/documentSymbol')return core.symbols(text(params.textDocument.uri));

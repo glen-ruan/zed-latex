@@ -11,7 +11,7 @@ function occurrences(files,docs){
       while((match=header.exec(source))){
         if(source.slice(source.lastIndexOf('\n',match.index)+1,match.index).trimStart().startsWith('%'))continue;
         const open=match[2],close=open==='{'?'}':')';let depth=1,braces=0,quoted=false,end=header.lastIndex;
-        for(;end<source.length;end++){const c=source[end];if(c==='\\'){end++;continue;}if(c==='"')quoted=!quoted;if(!quoted){if(open==='('){if(c==='{')braces++;if(c==='}')braces--;if(braces)continue;}if(c===open)depth++;if(c===close&&!--depth)break;}}
+        for(;end<source.length;end++){const c=source[end];if(c==='\\'){end++;continue;}if(c==='"'&&(open==='{'?depth===1:braces===0))quoted=!quoted;if(!quoted){if(open==='('){if(c==='{')braces++;if(c==='}')braces--;if(braces)continue;}if(c===open)depth++;if(c===close&&!--depth)break;}}
         const body=source.slice(header.lastIndex,end);const entryStart=header.lastIndex;header.lastIndex=end+1;
         if(/^(comment|string|preamble)$/i.test(match[1]))continue;
         const key=/^\s*([^,\s{}()]+)\s*,/.exec(body);if(!key)continue;
