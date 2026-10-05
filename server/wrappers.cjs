@@ -22,7 +22,7 @@ function effects(model){
   let preceding=0;for(let i=ref.index-1;i>=0&&text[i]==='\\';i--)preceding++;if(preceding%2)continue;
   const env=group(text,ref.index+ref[0].length);if(!env)continue;
   const shared=group(text,env.next,'[',']'),heading=group(text,shared?.next||env.next),param=/^#([1-9])$/.exec(env.value.trim());
-  if(param&&heading&&Number(param[1])<=model.arity)theorems.push({parameter:Number(param[1]),heading:heading.value});
+  if(param&&heading&&Number(param[1])<=model.arity)theorems.push({parameter:Number(param[1]),heading:heading.value,unnumbered:/^\\newtheorem\*/.test(ref[0]),sharedCounter:shared?.value,counterWithin:group(text,heading.next,'[',']')?.value});
  }
  return {...model,files,theorems};
 }
@@ -75,7 +75,7 @@ function calls(source,registry,partial=false,all=false){
 }
 function references(source,registry){return calls(source,expand(registry)).flatMap(call=>call.model.files.flatMap(file=>{const argument=call.args[file.parameter-1];return argument?.start===undefined?[]:[{command:file.command,start:call.start,argument}];}));}
 function context(source,pos,registry){const core=require('./core.cjs'),end=core.offset(source,pos);for(const call of calls(source.slice(0,end),expand(registry),true))for(const file of call.model.files){const arg=call.args[file.parameter-1];if(arg?.partial){const prefix=arg.value.trimStart(),suffix=source.slice(end).split(arg.close)[0].split(/[{}\r\n]/)[0].trimEnd();return {command:file.command,prefix,start:end-prefix.length,end:end+suffix.length};}}return null;}
-function environments(source,registry){const result=[];for(const call of calls(source,expand(registry)))for(const env of call.model.theorems){const arg=call.args[env.parameter-1];if(arg?.start===undefined||!/^[\w@:*.-]+$/.test(arg.value.trim()))continue;const name=arg.value.trim();result.push({name,start:arg.start+arg.value.indexOf(name),end:arg.start+arg.value.indexOf(name)+name.length,wrapper:call.name,heading:env.heading.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||'')});}return result;}
+function environments(source,registry){const result=[];for(const call of calls(source,expand(registry)))for(const env of call.model.theorems){const arg=call.args[env.parameter-1];if(arg?.start===undefined||!/^[\w@:*.-]+$/.test(arg.value.trim()))continue;const name=arg.value.trim();result.push({name,start:arg.start+arg.value.indexOf(name),end:arg.start+arg.value.indexOf(name)+name.length,wrapper:call.name,unnumbered:env.unnumbered,sharedCounter:env.sharedCounter?.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||''),counterWithin:env.counterWithin?.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||''),heading:env.heading.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||'')});}return result;}
 function expand(registry){
  if(![...registry.values()].some(model=>model.files.length||model.theorems.length))return registry;
  const result=new Map([...registry].map(([name,model])=>[name,{...model,files:[...model.files],theorems:[...model.theorems]}]));
@@ -85,7 +85,7 @@ function expand(registry){
   for(const model of result.values())for(const call of calls(model.body,result,false,true)){
    const parameter=n=>{const match=/^#([1-9])$/.exec(call.args[n-1]?.value?.trim()||'');return match&&Number(match[1])<=model.arity?Number(match[1]):null;};
    for(const file of [...call.model.files]){const mapped=parameter(file.parameter);if(mapped)changed=add(model.files,{...file,parameter:mapped})||changed;}
-   for(const env of [...call.model.theorems]){const mapped=parameter(env.parameter);if(!mapped)continue;const heading=env.heading.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||'');if(/##/.test(heading))continue;changed=add(model.theorems,{...env,parameter:mapped,heading})||changed;}
+   for(const env of [...call.model.theorems]){const mapped=parameter(env.parameter);if(!mapped)continue;const heading=env.heading.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||'');if(/##/.test(heading))continue;changed=add(model.theorems,{...env,parameter:mapped,heading,sharedCounter:env.sharedCounter?.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||''),counterWithin:env.counterWithin?.replace(/#([1-9])/g,(_,n)=>call.args[Number(n)-1]?.value||'')})||changed;}
   }
   if(!changed)break;
  }

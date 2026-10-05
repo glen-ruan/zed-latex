@@ -38,6 +38,8 @@ jobs:
       - name: Check modern document commands
         run: node tests/document-commands-probe.cjs
 
+      - name: Check environment hover metadata
+        run: node tests/environments-probe.cjs
       - name: Check static macro wrappers
         run: node tests/wrappers-probe.cjs
       - name: Check file path contexts

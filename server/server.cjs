@@ -237,9 +237,10 @@ function definition(url,pos){
   const source=text(url),at=core.offset(source,pos),span=source.slice(Math.max(0,at-1),at+1);if(core.mask(source).slice(Math.max(0,at-1),at+1)!==span)return [];
   let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root,docs);if(files.length)return files;
   const reference=referenceTarget(url,pos);if(reference)return reference.definitions.map(item=>({uri:core.uri(item.file),range:item.range}));
-  const idx=projectIndex(core.file(url)),name=commandHelp.at(source,pos)?.name||symbolAt(url,pos),entry=idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
+  const idx=projectIndex(core.file(url)),environment=require('./environments.cjs').at(source,pos),name=commandHelp.at(source,pos)?.name||symbolAt(url,pos),entry=environment?idx.environments.get(environment.name):(idx.commands.get(name)||idx.environments.get(name));return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
 }
 function hover(url,pos){
+  const environment=require('./environments.cjs').at(text(url),pos);if(environment){const entry=projectIndex(core.file(url)).environments.get(environment.name);if(entry){const info=require('./environments.cjs').info(environment.name,entry);return {range:environment.range,contents:{kind:'plaintext',value:info.documentation}};}}
   const command=commandHelp.at(text(url),pos);
   if(command){const idx=projectIndex(core.file(url)),raw=command.name+(text(url).slice(core.offset(text(url),command.range.start),core.offset(text(url),command.range.end)).endsWith('*')?'*':''),info=commandInfo(raw,idx)||commandInfo(command.name,idx);if(info)return {range:command.range,contents:{kind:'plaintext',value:info.documentation}};}
   const reference=referenceTarget(url,pos);
@@ -342,7 +343,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.22'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.23'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.
