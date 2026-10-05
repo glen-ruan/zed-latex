@@ -46,6 +46,10 @@ jobs:
         run: node tests/wrappers-probe.cjs
       - name: Check file path contexts
         run: node tests/paths-probe.cjs
+      - name: Check environment snippet completion
+        run: node tests/navigation-probe.cjs
+        env:
+          ENV_SNIPPETS: '1'
       - name: Check class module navigation
         run: node tests/navigation-probe.cjs
 

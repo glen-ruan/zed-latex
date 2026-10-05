@@ -3,7 +3,7 @@
 const {group}=require('./paths.cjs');
 function specification(spec){
  const args=[];let cursor=0;
- while(cursor<spec.length){if(/\s/.test(spec[cursor])){cursor++;continue;}const type=spec[cursor++];if(type==='m')args.push({});else if(type==='o')args.push({optional:true,defaultValue:'-NoValue-'});else if(type==='O'){const value=group(spec,cursor);if(!value)return null;cursor=value.next;args.push({optional:true,defaultValue:value.value});}else if(type==='s')args.push({star:true});else return null;if(args.length>9)return null;}
+ while(cursor<spec.length){if(/\s/.test(spec[cursor])){cursor++;continue;}const type=spec[cursor++];if(type==='m')args.push({});else if(type==='o')args.push({optional:true,defaultValue:'-NoValue-',noDefault:true});else if(type==='O'){const value=group(spec,cursor);if(!value)return null;cursor=value.next;args.push({optional:true,defaultValue:value.value});}else if(type==='s')args.push({star:true});else return null;if(args.length>9)return null;}
  return args;
 }
 function effects(model){

@@ -56,4 +56,23 @@ function info(name,entry){
  details.push((entry.wrapper?'注册：':'定义：')+where);
  return {signature,documentation:[signature,...details].join('\n')};
 }
-module.exports={scan,at,info};
+
+function argumentsSnippet(entry){
+ let args;
+ if(entry.documentSpec!==undefined)args=require('./wrappers.cjs').specification(entry.documentSpec);
+ else if(entry.arity!==undefined)args=Array.from({length:entry.arity},(_,i)=>i===0&&entry.defaultArg!==undefined?{optional:true,defaultValue:entry.defaultArg}:{});
+ if(!args)return '';
+ const escape=value=>String(value).replace(/[\\$}]/g,'\\$&');let snippet='',stop=0;
+ for(let i=0;i<args.length;i++){const arg=args[i];if(arg.star||(arg.optional&&arg.noDefault))continue;const value=arg.optional?arg.defaultValue:'参数'+(i+1);snippet+=(arg.optional?'[':'{')+'${'+(++stop)+':'+escape(value)+'}'+(arg.optional?']':'}');}
+ return snippet;
+}
+function completion(source,context,name,entry,snippets){
+ const plain={start:context.start,end:context.end,newText:name};
+ if(!snippets||context.command!=='begin')return plain;
+ const args=argumentsSnippet(entry);if(!args)return plain;
+ const closed=source[context.end]==='}',after=require('./core.cjs').mask(source.slice(context.end+(closed?1:0)));
+ // Preserve existing arguments and text instead of guessing whether to replace them.
+ if(/^\s*[\[{]/.test(after))return plain;
+ return {start:context.start,end:context.end+(closed?1:0),newText:name+'}'+args+'$0',insertTextFormat:2};
+}
+module.exports={scan,at,info,argumentsSnippet,completion};
