@@ -10,3 +10,5 @@ Set TEX_FMT to a formatter executable to verify actual LaTeX formatting and idem
 BST: node --liftoff-only tests/bst-smoke.cjs validates independent highlights/outline/folds/indents and four standard style files. Its test WASM is built separately for web-tree-sitter; Zed builds the native grammar from the manifest-pinned remote revision with its managed WASI SDK.
 
 PDF recovery: node tests/recovery-probe.cjs checks retry decisions and a real Windows exclusive PDF lock. node tests/recovery-tex-probe.cjs requires TeX Live and reproduces a cached xdvipdfmx failure, then verifies automatic recovery and subsequent incremental builds.
+
+路径及模板导航：`node tests/paths-probe.cjs`、`node tests/navigation-probe.cjs`。后者默认使用隔离的临时项目；可设置 NUAA_PROJECT 为论文目录，执行不构建、不写源文件的调用处导航检查。

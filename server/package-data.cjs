@@ -1,17 +1,16 @@
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),core=require('./core.cjs');
+const core=require('./core.cjs');
 const data=require('./data/workshop-packages.json');
 function cleanSnippet(value){return String(value||'').replace(/\$\{(\d+):([^}]*)\}/g,(_,n,text)=>'${'+n+':'+text.split('%')[0]+'}');}
 function plain(value){return cleanSnippet(value).replace(/\$\{\d+:([^}]*)\}/g,'$1').replace(/\$\{\d+\|([^}]*)\|\}/g,(_,values)=>values.split(',')[0]).replace(/\$\d+/g,'');}
 function context(files,folders,docs){
- const local=new Map();for(const folder of folders)for(const filename of core.scan(folder))if(/\.(sty|cls)$/i.test(filename))local.set(path.basename(filename),filename);
+ // Local files are resolved once by the shared dependency graph; do not rescan for same-name packages.
  const queue=[...files],seen=new Set(),selected=new Map(),passed=new Map(),localFiles=[];
- function add(name,options=''){name=name.trim();if(!name||/[\\#$]/.test(name))return;let entry=selected.get(name);if(!entry){entry=new Set();selected.set(name,entry);}for(const option of options.split(',').map(value=>value.trim()).filter(Boolean))entry.add(option);const filename=local.get(name+'.sty');if(filename)queue.push(filename);}
+ function add(name,options=''){name=name.trim();if(!name||/[\\#$]/.test(name))return;let entry=selected.get(name);if(!entry){entry=new Set();selected.set(name,entry);}for(const option of options.split(',').map(value=>value.trim()).filter(Boolean))entry.add(option);}
  for(let cursor=0;cursor<queue.length;cursor++){
   const filename=queue[cursor];if(seen.has(core.key(filename)))continue;seen.add(core.key(filename));let source;try{source=core.mask(core.read(filename,docs));}catch{continue;}if(/\.(sty|cls)$/i.test(filename))localFiles.push(filename);
   for(const match of source.matchAll(/\\(?:usepackage|RequirePackage)(?:WithOptions)?\s*(?:\[([^\]]*)\])?\s*\{([^{}]+)\}/g))for(const name of match[2].split(','))add(name,match[1]);
   for(const match of source.matchAll(/\\PassOptionsToPackage\s*\{([^{}]*)\}\s*\{([^{}]+)\}/g))for(const name of match[2].split(',')){const options=passed.get(name.trim())||new Set();for(const option of match[1].split(','))options.add(option.trim());passed.set(name.trim(),options);}
-  for(const match of source.matchAll(/\\(?:documentclass|LoadClass)(?:WithOptions)?\s*(?:\[[^\]]*\])?\s*\{([^{}]+)\}/g)){const target=local.get(match[1].trim()+'.cls');if(target)queue.push(target);}
  }
  for(const [name,options] of passed)if(selected.has(name))for(const option of options)selected.get(name).add(option);
  const pending=[...selected.keys()];for(let cursor=0;cursor<pending.length;cursor++){const name=pending[cursor],record=data.packages[name];if(!record)continue;for(const dep of record.deps||[]){if(!dep.name)continue;if(dep.if&&!(typeof dep.if==='string'&&[...(selected.get(name)||[])].some(option=>option.replace(/\s*=\s*/g,'=')===dep.if.replace(/\s*=\s*/g,'='))))continue;if(dep.options?.length&&!dep.options.every(option=>selected.get(name)?.has(option)))continue;if(!selected.has(dep.name)){selected.set(dep.name,new Set());pending.push(dep.name);}}}

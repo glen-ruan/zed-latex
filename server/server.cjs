@@ -50,7 +50,7 @@ function projectSettings(){
 function globalConfig(){return config;}
 function configure(raw){config=core.settings({...projectSettings(),...(raw['latex-workshop'] || raw)});refresh();}
 function resolveRoot(active){return core.rootFile(active,folders,docs,config['latex.rootFile']);}
-function projectIndex(active){let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}const context=packageData.context(files,folders,docs);return {...core.index([...new Set([...[...context.localFiles].reverse(),...files])],docs),...context};}
+function projectIndex(active){let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}const context=packageData.context(files,folders,docs);const all=[...new Set([...context.localFiles,...files])],library=all.filter(file=>/\.(cls|sty|def|cfg)$/i.test(file)),content=all.filter(file=>!library.includes(file));return {...core.index([...library,...content],docs),...context};}
 function publish(filename){
   const filenameKey=core.key(filename),url=core.uri(filename),doc=docs.get(filenameKey);
   if(!doc&&!buildDiagnostics.has(filenameKey)&&!publishedDiagnostics.has(filenameKey))return;
@@ -196,10 +196,11 @@ async function completions(url,pos){
     const editRange=core.range(source,end-prefix.length,optionEnd);
     return values.filter(value=>packageData.plain(value).toLowerCase().startsWith(prefix.toLowerCase())).map(value=>({label:packageData.plain(value),kind:10,detail:options[1]+' option',sortText:packageData.plain(value).toLowerCase(),textEdit:{range:editRange,newText:snippets?packageData.cleanSnippet(value):value.split('=')[0]+(value.includes('=')?'=':'')},...(snippets?{insertTextFormat:2}:{})}));
   }
-  const match=/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\s*\{([^{}]*)$/.exec(before);
+  const pathContext=completion.context(source,pos);
+  const match=pathContext?[null,pathContext.command,pathContext.prefix]:null;
   if(match){
     const command=match[1],prefix=match[2].split(',').at(-1).trimStart();let entries=[];
-    if(completion.FILE_COMMANDS.has(command)){let root;try{root=resolveRoot(filename);}catch{root=filename;}entries=completion.paths(filename,root,command,prefix);}
+    if(completion.FILE_COMMANDS.has(command)){let root;try{root=resolveRoot(filename);}catch{root=filename;}entries=completion.paths(filename,root,command,prefix,docs,pathContext);}
     else if(command==='usepackage'||command==='RequirePackage'||command==='documentclass'){const names=await installedTexNames();const extension=command==='documentclass'?'.cls':'.sty';const local=folders.flatMap(folder=>core.scan(folder)).filter(file=>file.endsWith(extension)).map(file=>path.basename(file,extension));entries=[...new Set([...(command==='documentclass'?names.classes:names.packages),...local])].map(label=>({label,kind:9,detail:extension.slice(1)+' available locally'}));}
     else if(/^(?:[a-zA-Z]*cite[a-zA-Z]*|nocite)$/.test(command))entries=[...idx.citations].map(([label,data])=>({label,kind:18,detail:data.detail}));
     else if(/^(?:ref|eqref|pageref|autoref|cref|Cref|vref)$/.test(command))entries=[...idx.labels].map(([label])=>({label,kind:18}));
@@ -224,9 +225,9 @@ function referenceTarget(url,pos){
 }
 function definition(url,pos){
   const source=text(url),at=core.offset(source,pos),span=source.slice(Math.max(0,at-1),at+1);if(core.mask(source).slice(Math.max(0,at-1),at+1)!==span)return [];
-  let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root);if(files.length)return files;
+  let root;try{root=resolveRoot(core.file(url));}catch{root=core.file(url);}const files=completion.pathDefinition(text(url),pos,core.file(url),root,docs);if(files.length)return files;
   const reference=referenceTarget(url,pos);if(reference)return reference.definitions.map(item=>({uri:core.uri(item.file),range:item.range}));
-  const idx=projectIndex(core.file(url)),name=symbolAt(url,pos),entry=idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
+  const idx=projectIndex(core.file(url)),name=commandHelp.at(source,pos)?.name||symbolAt(url,pos),entry=idx.commands.get(name)||idx.environments.get(name);return entry?[{uri:core.uri(entry.file),range:entry.range}]:[];
 }
 function hover(url,pos){
   const command=commandHelp.at(text(url),pos);
@@ -238,7 +239,7 @@ function hover(url,pos){
     else value=target.name+'\n'+where+'\n\n'+preview.context(source,entry.range.start.line);
     return {range:target.range,contents:{kind:'plaintext',value}};
   }
-  const entry=definition(url,pos)[0];if(!entry)return null;const file=core.file(entry.uri);return {contents:{kind:'plaintext',value:symbolAt(url,pos)+' — '+file+':'+(entry.range.start.line+1)+'\n\n'+preview.context(core.read(file,docs),entry.range.start.line)}};
+  const entries=definition(url,pos);if(!entries.length)return null;if(entries.length>1)return {contents:{kind:'plaintext',value:'当前文件存在多个导入上下文：\n'+entries.map(entry=>core.file(entry.uri)).join('\n')}};const entry=entries[0],file=core.file(entry.uri),context=/\.(tex|latex|cls|sty|def|cfg|bib|bibtex|biblatex|bst)$/i.test(file)?'\n\n'+preview.context(core.read(file,docs),entry.range.start.line):'';return {contents:{kind:'plaintext',value:symbolAt(url,pos)+' — '+file+':'+(entry.range.start.line+1)+context}};
 }
 
 function bibFormat(source,spaces){
@@ -331,7 +332,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.16'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.17'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

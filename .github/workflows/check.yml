@@ -37,3 +37,8 @@ jobs:
         run: node tests/tex-log-probe.cjs
       - name: Check modern document commands
         run: node tests/document-commands-probe.cjs
+
+      - name: Check file path contexts
+        run: node tests/paths-probe.cjs
+      - name: Check class module navigation
+        run: node tests/navigation-probe.cjs

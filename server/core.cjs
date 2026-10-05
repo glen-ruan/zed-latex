@@ -53,30 +53,9 @@ function scan(folder, result=[], depth=0) {
   }
   return result;
 }
-function included(file, docs) {
-  let source;try{source=mask(read(file,docs));}catch{return [];}
-  const targets=[];
-  for(const match of source.matchAll(/\\(?:input|include|subfile)\s*\{([^{}]+)\}/g)) {
-    if(/[\\#$]/.test(match[1]))continue;
-    const candidate=path.resolve(path.dirname(file),match[1]);
-    for(const target of [candidate,candidate+'.tex'])if(fs.existsSync(target)){targets.push(target);break;}
-  }
-  for(const match of source.matchAll(/\\(?:import|subimport)\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g)){
-    const candidate=path.resolve(path.dirname(file),match[1],match[2]);
-    for(const target of [candidate,candidate+'.tex'])if(fs.existsSync(target)){targets.push(target);break;}
-  }
-  for(const match of source.matchAll(/\\(?:bibliography|addbibresource)(?:\[[^\]]*\])?\s*\{([^{}]+)\}/g)){
-    for(const name of match[1].split(',')){
-      const candidate=path.resolve(path.dirname(file),name.trim());
-      for(const target of [candidate,candidate+'.bib'])if(fs.existsSync(target)){targets.push(target);break;}
-    }
-  }
-  return targets;
-}
+function included(file, docs) { return [...require('./paths.cjs').graph(file,docs).files].filter(target=>key(target)!==key(file)); }
 function dependencies(root,docs,result=new Set()) {
-  if(result.has(key(root)))return result;
-  result.add(key(root));
-  if(TEX.test(root))for(const target of included(root,docs))dependencies(target,docs,result);
+  for(const target of require('./paths.cjs').graph(root,docs).files)result.add(target);
   return result;
 }
 function rootFile(active,folders,docs,explicit) {

@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),core=require('../server/core.cjs');
+const temporary=!process.env.NUAA_PROJECT,base=path.resolve('.dev');fs.mkdirSync(base,{recursive:true});const root=temporary?fs.mkdtempSync(path.join(base,'navigation ')):path.resolve(process.env.NUAA_PROJECT),main=path.join(root,'master.tex');
+if(temporary){fs.mkdirSync(path.join(root,'template'));fs.mkdirSync(path.join(root,'bib'));fs.writeFileSync(main,String.raw`\documentclass{local}\renewcommand\nuaanotation[2]{#1#2}\makecover\makedeclare\makeabstract\nuaanotation{x}\optional[option]{x}\bibliographystyle{bib/masterbib}`);fs.writeFileSync(path.join(root,'local.cls'),String.raw`\InputIfFileExists{template/front.def}{}{}`);fs.writeFileSync(path.join(root,'template/front.def'),String.raw`% Public cover entry
+\def\makecover{cover}
+\newcommand\makedeclare{declare}
+\newcommand\makeabstract{abstract}
+\newcommand\nuaanotation[1]{#1}
+\newcommand\optional[2][default]{#1#2}`);fs.writeFileSync(path.join(root,'bib/masterbib.bst'),'ENTRY {} {} {}');}
+const source=fs.readFileSync(main,'utf8'),original=fs.readFileSync(main);const child=spawn(process.execPath,[path.resolve('server/server.cjs')]);let buffer=Buffer.alloc(0),id=0;const pending=new Map();
+function send(message){const data=Buffer.from(JSON.stringify({jsonrpc:'2.0',...message}));child.stdin.write('Content-Length: '+data.length+'\r\n\r\n');child.stdin.write(data);}
+function request(method,params){return new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});send({id:n,method,params});});}
+child.stdout.on('data',data=>{buffer=Buffer.concat([buffer,data]);while(true){const end=buffer.indexOf('\r\n\r\n');if(end<0)return;const size=Number(/Content-Length:\s*(\d+)/i.exec(buffer.subarray(0,end).toString())[1]);if(buffer.length<end+4+size)return;const m=JSON.parse(buffer.subarray(end+4,end+4+size));buffer=buffer.subarray(end+4+size);if(pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.id!==undefined)send({id:m.id,result:m.method==='workspace/configuration'?m.params.items.map(()=>({'latex.autoBuild.run':'never'})):null});}});
+child.stderr.on('data',data=>process.stderr.write(data));const timer=setTimeout(()=>{child.kill();console.error('FAIL navigation timeout');process.exitCode=1;},30000);
+(async()=>{try{
+ await request('initialize',{rootUri:core.uri(root),capabilities:{},initializationOptions:{'latex.autoBuild.run':'never'}});send({method:'initialized',params:{}});send({method:'textDocument/didOpen',params:{textDocument:{uri:core.uri(main),languageId:'latex',version:1,text:source}}});
+ for(const name of ['makecover','makedeclare','makeabstract','nuaanotation',...(temporary?['optional']:[])]){const start=source.lastIndexOf('\\'+name),position=core.position(source,start+3),textDocument={uri:core.uri(main)};assert(start>=0);const hover=await request('textDocument/hover',{textDocument,position});assert(hover?.contents.value.includes('\\'+name),name+' hover');assert(hover.contents.value.includes('定义：'));const defs=await request('textDocument/definition',{textDocument,position});assert(defs.length===1,name+' definition');if(temporary&&name==='nuaanotation'){assert.equal(core.key(core.file(defs[0].uri)),core.key(main));assert(hover.contents.value.includes('{参数1}{参数2}'));}else assert(core.file(defs[0].uri).endsWith('.def'));}
+ const hover=await request('textDocument/hover',{textDocument:{uri:core.uri(main)},position:core.position(source,source.indexOf('\\bibliographystyle')+5)});assert(hover.contents.value.includes('\\bibliographystyle{样式名或路径}'));
+ const offset=source.indexOf('bib/masterbib'),defs=await request('textDocument/definition',{textDocument:{uri:core.uri(main)},position:core.position(source,offset+5)});assert.equal(core.key(core.file(defs[0].uri)),core.key(path.join(root,'bib/masterbib.bst')));
+ assert.deepEqual(fs.readFileSync(main),original);console.log('PASS navigation LSP: class-loaded module commands hover/jump at call sites, bibliography signature and local BST path; project files unchanged');
+ await request('shutdown',null);send({method:'exit',params:null});
+ }catch(error){console.error(error);process.exitCode=1;}finally{clearTimeout(timer);child.kill();if(temporary){assert(path.resolve(root).startsWith(base+path.sep));fs.rmSync(root,{recursive:true,force:true});}}})();

@@ -1,6 +1,10 @@
 'use strict';
 const core=require('./core.cjs');
 const HELP={
+ import:['\\import{主文件相对目录}{文件名}','import：从指定目录导入文件；被导入文件的 input 和图片查找优先使用该目录。'],
+ subimport:['\\subimport{当前导入目录的相对路径}{文件名}','import：在当前导入目录基础上继续导入子文件；目录和文件参数分别补全。'],
+ InputIfFileExists:['\\InputIfFileExists{文件名}{存在时执行}{不存在时执行}','文件存在时读取它；插件追踪静态文件名，以索引模块中的命令定义。'],
+
  cite:['\\cite[注释]{文献键1,文献键2}','插入文献引用；显示样式由参考文献方案决定。'],
  citep:['\\citep[前注][后注]{文献键}','natbib：生成括号形式的引用。'],
  citet:['\\citet[前注][后注]{文献键}','natbib：生成作者作为正文一部分的引用。'],
@@ -22,6 +26,8 @@ const HELP={
  caption:['\\caption[目录短说明]{说明}','为浮动体添加说明并更新编号；相应 label 通常放在其后。'],
  newcommand:['\\newcommand{\\命令名}[参数个数][第一参数默认值]{定义}','定义命令；若提供默认值，第一参数成为可选参数。'],
  bibliography:['\\bibliography{数据库名1,数据库名2}','传统 BibTeX：指定 bib 数据库并插入参考文献列表。'],
+ bibliographystyle:['\\bibliographystyle{样式名或路径}','传统 BibTeX：选择 .bst 参考文献样式，通常省略扩展名；路径参数可跳转到本地样式文件。'],
+ PassOptionsToClass:['\\PassOptionsToClass{选项1,选项2}{文档类}','在加载文档类之前向它传递选项。'],
  addbibresource:['\\addbibresource[选项]{文件名.bib}','biblatex：添加参考文献数据库。'],
  printbibliography:['\\printbibliography[选项]','biblatex：打印参考文献列表。'],
 };
