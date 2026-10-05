@@ -61,3 +61,8 @@ Standard WASM build and stdio protocol checks passed for reference context and c
 ## 0.4.9 verification (2026-10-05)
 
 Standard WASM build and stdio checks passed for command-token usage help, reference-key metadata, custom first-optional argument signatures and comment exclusion. The live extension index had no latex entry and the former runtime directory was absent during inspection, so the screenshot's exact running service version could not be confirmed. Native command hover rendering remains a separate acceptance check.
+## 0.4.10 verification (2026-10-05)
+
+Imported 32 package/dependency records from fixed official Workshop revision c5bdf430a1577e2df28139ed4b1bd5c9ad859865; bundled the upstream MIT license. The catalog is a scoped subset and records unavailable dependencies explicitly. Static project package discovery does not execute TeX.
+
+Standard WASM build and protocol checks passed for package gating, commented loads, PassOptionsToPackage without a load, metadata dependencies, unsaved preamble updates, local class/style imports, project overrides, parameter snippets, shared completion/hover documentation, environments and option keys. Actual TeX integration regressions passed, including changed-child compilation, cancellation and error recovery, diagnostics, existing auto-build behavior and tex-fmt. Compatibility coverage was not expanded. Native 0.4.10 completion UI acceptance remains separate.

@@ -11,6 +11,7 @@ const references=require('./references.cjs');
 const completion=require('./completion.cjs');
 const preview=require('./hover.cjs');
 const commandHelp=require('./command-help.cjs');
+const packageData=require('./package-data.cjs');
 const texCatalog=new Map();
 const logSync=new (require('./log-sync.cjs').LogSync)();
 const diagnosticFiles=new Map();
@@ -48,7 +49,7 @@ function projectSettings(){
 function globalConfig(){return config;}
 function configure(raw){config=core.settings({...projectSettings(),...(raw['latex-workshop'] || raw)});refresh();}
 function resolveRoot(active){return core.rootFile(active,folders,docs,config['latex.rootFile']);}
-function projectIndex(active){let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}return core.index(files,docs);}
+function projectIndex(active){let files;try{files=[...core.dependencies(resolveRoot(active),docs)];}catch{files=folders.flatMap(folder=>core.scan(folder));}const context=packageData.context(files,folders,docs);return {...core.index([...new Set([...[...context.localFiles].reverse(),...files])],docs),...context};}
 function publish(filename){
   const url=core.uri(filename);const doc=docs.get(core.key(filename));if(!doc)return;
   const diagnostics=[...core.syntaxDiagnostics(doc.text,filename),...(buildDiagnostics.get(core.key(filename))||[])];
@@ -168,8 +169,18 @@ async function installedTexNames(){
   const key=JSON.stringify(directories),catalogConfig={...config,'latex.tools.searchPaths':directories};if(texCatalog.has(key))return texCatalog.get(key);
   const result=(async()=>{try{const processResult=await run('kpsewhich',['--var-value=TEXMFDIST'],{cwd:folders[0],config:catalogConfig,timeoutMs:3000});if(processResult.code!==0)return {packages:[],classes:[]};const directory=processResult.output.trim();if(!directory)return {packages:[],classes:[]};return completion.parseDatabase(await fs.promises.readFile(path.join(directory,'ls-R'),'utf8'));}catch{return {packages:[],classes:[]};}})();texCatalog.set(key,result);return result;
 }
+function commandInfo(name,idx){
+  const entry=idx.commands.get(name);
+  if(entry){const source=core.read(entry.file,docs),signature=commandHelp.custom(name,source,entry)||'\\'+name;const snippet=signature.slice(1).replace(/参数(\d)/g,(_,n)=>String.fromCharCode(36)+'{'+n+':参数'+n+'}');return {signature,snippet,documentation:signature+'\n自定义命令\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)};}
+  const record=idx.packageCommands.get(name),help=commandHelp.HELP[name];
+  if(record)return {signature:record.signature,snippet:record.snippet,documentation:[...record.variants.slice(0,4),'宏包：'+record.package,help?.[1]||record.description].filter(Boolean).join('\n\n')};
+  if(help)return {signature:help[0],snippet:completion.snippets(name)?.[0]||name,documentation:help[0]+'\n\n'+help[1]};
+  return null;
+}
 async function completions(url,pos){
   const source=text(url),end=core.offset(source,pos),before=core.mask(source.slice(0,end)),filename=core.file(url),idx=projectIndex(filename);
+  const options=/\\([A-Za-z]+)\*?\s*\[([^\]]*)$/.exec(before);
+  if(options&&!/[\\{}]/.test(options[2].split(',').at(-1))){const prefix=options[2].split(',').at(-1).trimStart(),editRange=core.range(source,end-prefix.length,end),snippets=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport;return (idx.packageKeys.get('\\'+options[1])||[]).filter(value=>packageData.plain(value).toLowerCase().startsWith(prefix.toLowerCase())).map(value=>({label:packageData.plain(value),kind:10,detail:options[1]+' option',textEdit:{range:editRange,newText:snippets?packageData.cleanSnippet(value):value.split('=')[0]+(value.includes('=')?'=':'')},...(snippets?{insertTextFormat:2}:{})}));}
   const match=/\\([A-Za-z]+)\*?(?:\[[^\]]*\])*\s*\{([^{}]*)$/.exec(before);
   if(match){
     const command=match[1],prefix=match[2].split(',').at(-1).trimStart();let entries=[];
@@ -177,12 +188,13 @@ async function completions(url,pos){
     else if(command==='usepackage'||command==='RequirePackage'||command==='documentclass'){const names=await installedTexNames();const extension=command==='documentclass'?'.cls':'.sty';const local=folders.flatMap(folder=>core.scan(folder)).filter(file=>file.endsWith(extension)).map(file=>path.basename(file,extension));entries=[...new Set([...(command==='documentclass'?names.classes:names.packages),...local])].map(label=>({label,kind:9,detail:extension.slice(1)+' available locally'}));}
     else if(/^(?:[a-zA-Z]*cite[a-zA-Z]*|nocite)$/.test(command))entries=[...idx.citations].map(([label,data])=>({label,kind:18,detail:data.detail}));
     else if(/^(?:ref|eqref|pageref|autoref|cref|Cref|vref)$/.test(command))entries=[...idx.labels].map(([label])=>({label,kind:18}));
-    else if(command==='begin'||command==='end')entries=[...new Set([...ENVS,...idx.environments.keys()])].map(label=>({label,kind:13}));
+    else if(command==='begin'||command==='end')entries=[...new Set([...ENVS.filter(name=>!packageData.REQUIRED_ENVS[name]||idx.packages.has(packageData.REQUIRED_ENVS[name])),...idx.packageEnvironments.keys(),...idx.environments.keys()])].map(label=>({label,kind:13,detail:idx.packageEnvironments.has(label)?'宏包：'+idx.packageEnvironments.get(label).package:undefined}));
     const context=completion.context(source,pos),editRange=core.range(source,context.start,context.end);
     return entries.filter(item=>item.label.toLowerCase().startsWith(prefix.toLowerCase())).map(({target,...item})=>({...item,textEdit:{range:editRange,newText:item.label}}));
   }
-  const prefix=/\\([A-Za-z@_:]*)$/.exec(before)?.[1];if(prefix===undefined)return [];
-  return [...new Set([...COMMANDS,...idx.commands.keys()])].filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase())).map(name=>{const snippet=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport&&completion.snippets(name);return {label:'\\'+name,kind:3,insertText:snippet?snippet[0]:name,...(snippet?{insertTextFormat:2,detail:snippet[1]}:{})};});
+  const prefix=/\\([A-Za-z@_:]*\*?)$/.exec(before)?.[1];if(prefix===undefined)return [];
+  const names=[...new Set([...COMMANDS,...Object.keys(commandHelp.HELP)].filter(name=>!packageData.REQUIRED[name]||idx.packages.has(packageData.REQUIRED[name])).concat([...idx.packageCommands.keys(),...idx.commands.keys()]))];
+  return names.filter(name=>name.toLowerCase().startsWith(prefix.toLowerCase())).map(name=>{const info=commandInfo(name,idx),snippet=clientCapabilities.textDocument?.completion?.completionItem?.snippetSupport&&info?.snippet;return {label:'\\'+name,kind:3,insertText:snippet||name,...(info?{detail:info.signature,documentation:{kind:'plaintext',value:info.documentation}}:{}),...(snippet?{insertTextFormat:2}:{})};});
 }
 function symbolAt(url,pos){
   const source=text(url),end=core.offset(source,pos),before=source.slice(0,end),after=source.slice(end);
@@ -202,9 +214,7 @@ function definition(url,pos){
 }
 function hover(url,pos){
   const command=commandHelp.at(text(url),pos);
-  if(command){const idx=projectIndex(core.file(url)),entry=idx.commands.get(command.name);if(entry){const source=core.read(entry.file,docs),signature=commandHelp.custom(command.name,source,entry);return {range:command.range,contents:{kind:'plaintext',value:(signature||'\\'+command.name)+'\n自定义命令\n\n'+preview.context(source,entry.range.start.line)+'\n\n定义：'+entry.file+':'+(entry.range.start.line+1)}};}
-    const help=commandHelp.HELP[command.name];if(help)return {range:command.range,contents:{kind:'plaintext',value:help[0]+'\n\n'+help[1]}};
-  }
+  if(command){const idx=projectIndex(core.file(url)),raw=command.name+(text(url).slice(core.offset(text(url),command.range.start),core.offset(text(url),command.range.end)).endsWith('*')?'*':''),info=commandInfo(raw,idx)||commandInfo(command.name,idx);if(info)return {range:command.range,contents:{kind:'plaintext',value:info.documentation}};}
   const reference=referenceTarget(url,pos);
   if(reference){const {target,definitions}=reference;if(!definitions.length)return null;if(definitions.length>1)return {range:target.range,contents:{kind:'plaintext',value:target.name+' — multiple definitions\n'+definitions.map(item=>item.file+':'+(item.range.start.line+1)).join('\n')}};
     const entry=definitions[0],source=core.read(entry.file,docs),where=entry.file+':'+(entry.range.start.line+1);let value;
@@ -304,7 +314,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.9'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.10'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.

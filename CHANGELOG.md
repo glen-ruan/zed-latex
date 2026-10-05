@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.10
+
+- Bundle 32 Workshop package/dependency metadata files from fixed upstream revision c5bdf430a1577e2df28139ed4b1bd5c9ad859865 with the MIT license.
+- Discover literal package loads and project-local class/style loads; activate available dependency metadata and update completion from unsaved buffers.
+- Share argument signatures, snippets and documentation between completion and hover; add loaded-package environment and option-key completion.
+- Prefer project command overrides and exclude commented loads. Passing options alone does not activate a package. Runtime use remains offline.
+
 ## 0.4.9
 
 - Show usage signatures and short explanations when hovering supported LaTeX commands, independently of reference-key previews.

@@ -35,6 +35,13 @@ impl zed::Extension for LatexExtension {
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("command-help.cjs"), include_str!("../server/command-help.cjs"))
             .map_err(|error| error.to_string())?;
+        std::fs::create_dir_all(directory.join("data")).map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("data/workshop-packages.json"), include_str!("../server/data/workshop-packages.json"))
+            .map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("data/LICENSE.LaTeX-Workshop"), include_str!("../server/data/LICENSE.LaTeX-Workshop"))
+            .map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("package-data.cjs"), include_str!("../server/package-data.cjs"))
+            .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("core.cjs"), include_str!("../server/core.cjs"))
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("tools.cjs"), include_str!("../server/tools.cjs"))

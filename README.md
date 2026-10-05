@@ -160,3 +160,14 @@ usepackage/RequirePackage 与 documentclass 补全读取本机 kpsewhich 返回�
 悬停在命令本身（例如 cite、frac、includegraphics）显示用法、参数形式和简短说明；悬停在引用键上仍显示对应标签或文献内容。内置说明只覆盖 command-help.cjs 中列出的常见命令，不保证覆盖所有宏包。包专属命令注明对应包，自定义同名命令优先使用项目定义。
 
 newcommand、renewcommand、providecommand、DeclareRobustCommand 风格的项目命令可显示参数个数及第一参数是否可选，并保留定义片段。传统 def、复杂动态参数和带嵌套语法的默认值不做完整签名推断。说明以纯文本显示，不依赖公式渲染或网络查询。
+## 0.4.10 宏包相关补全与说明
+
+内置 32 份 LaTeX Workshop 官方宏包及依赖元数据，涵盖 amsmath、mathtools、graphicx、hyperref、cleveref、natbib、biblatex、siunitx、booktabs、fontspec、tikz 等。数据来源固定为 [Workshop c5bdf430](https://github.com/James-Yu/LaTeX-Workshop/tree/c5bdf430a1577e2df28139ed4b1bd5c9ad859865/data/packages)，MIT 许可证随扩展嵌入；运行时无需联网下载命令数据。
+
+根据主文件及依赖文件中的 usepackage/RequirePackage 字面加载语句启用相应命令，并跟踪元数据中的依赖。项目本地 cls/sty 的字面加载语句和命令定义也会纳入索引。注释、verbatim 和仅传递选项的语句不会启用宏包。未保存的编辑缓冲区会更新补全，项目重新定义的命令优先于宏包定义。
+
+命令补全显示参数签名和说明；支持 snippets 的客户端会插入参数占位符，悬停复用相同说明。begin/end 中会补全已加载宏包的环境；includegraphics 等有官方选项元数据的命令可补全选项键，例如 width=、height=。
+
+例如加载 mathtools 后输入 dfr，可补全其 amsmath 依赖提供的 dfrac，并查看分子/分母参数；删除加载语句后，此类宏包命令不再出现在建议中。实际键绑定以编辑器配置为准。
+
+这是静态索引，不执行 TeX 条件分支或展开宏生成的包名。未收录的宏包、未提供元数据的依赖、外部文档类的隐式加载、复杂包选项和键值语法不保证完整支持。数据中的少见/内部命令默认不加入补全；不能把此版本视为完整 Workshop 补全兼容。
