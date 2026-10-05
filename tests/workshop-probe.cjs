@@ -217,6 +217,19 @@ function change(file,source,version){send({method:'textDocument/didChange',param
  fs.writeFileSync(externalLog,'Output written on build/main.xdv (1 page).\n');for(let i=0;i<30&&((diagnostics.get(core.key(unopened))||[]).some(d=>d.severity===1));i++)await pause(100);assert.deepEqual(diagnostics.get(core.key(unopened)),[],'Unopened source diagnostic not cleared');fs.unlinkSync(unopened);
  console.log('PASS unopened-file diagnostics: traditional external TeX error location published and cleared without opening the child');
  console.log('PASS external task diagnostics: new errors imported, incomplete logs ignored, successful log clears stale errors with auto-build disabled');
+
+ const secondMain=path.join(root,'second.tex'),secondLog=path.join(root,'build/second.log');fs.writeFileSync(secondMain,'\\documentclass{article}\\input{chapter}');open(secondMain);
+ const sharedFailure='./chapter.tex:2: Shared multi-root failure.\nNo pages of output.\n';
+ async function waitDiagnostic(predicate){for(let i=0;i<35;i++){if(predicate(diagnostics.get(core.key(chapter))||[]))return;await pause(100);}assert(predicate(diagnostics.get(core.key(chapter))||[]),'Multi-root diagnostic timeout');}
+ fs.writeFileSync(externalLog,sharedFailure);await waitDiagnostic(items=>items.some(item=>item.message.includes('Shared multi-root failure')));
+ fs.writeFileSync(secondLog,sharedFailure);await waitDiagnostic(items=>items.some(item=>item.message.includes('Shared multi-root failure')&&item.relatedInformation?.length===2));
+ assert.equal((diagnostics.get(core.key(chapter))||[]).filter(item=>item.message.includes('Shared multi-root failure')).length,1,'Shared diagnostic duplicated');
+ fs.writeFileSync(externalLog,'Output written on build/main.xdv (1 page).\n');await waitDiagnostic(items=>items.some(item=>item.message.includes('Shared multi-root failure')&&item.relatedInformation?.length===1));
+ const remainingIssue=(diagnostics.get(core.key(chapter))||[]).find(item=>item.message.includes('Shared multi-root failure'));assert.equal(core.key(core.file(remainingIssue.relatedInformation[0].location.uri)),core.key(secondMain));
+ fs.writeFileSync(secondLog,'Output written on build/second.xdv (1 page).\n');await waitDiagnostic(items=>!items.some(item=>item.message.includes('Shared multi-root failure')));
+ send({method:'textDocument/didClose',params:{textDocument:{uri:core.uri(secondMain)}}});fs.unlinkSync(secondMain);
+ console.log('PASS multi-root LSP: A success preserves B failure, duplicate diagnostics merge, B success clears final diagnostic');
+
  console.log('PASS missing formatter reports dependency; bst excluded');
  await request('shutdown',{});send({method:'exit'});clearTimeout(timeout);
  await new Promise(resolve=>child.once('exit',resolve));fs.rmSync(root,{recursive:true,force:true});

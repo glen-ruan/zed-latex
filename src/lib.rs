@@ -60,6 +60,8 @@ impl zed::Extension for LatexExtension {
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("build-retry.cjs"), include_str!("../server/build-retry.cjs"))
             .map_err(|error| error.to_string())?;
+        std::fs::write(directory.join("build-diagnostics.cjs"), include_str!("../server/build-diagnostics.cjs"))
+            .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("build-report.cjs"), include_str!("../server/build-report.cjs"))
             .map_err(|error| error.to_string())?;
         std::fs::write(directory.join("references.cjs"), include_str!("../server/references.cjs"))

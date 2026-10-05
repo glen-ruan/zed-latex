@@ -42,3 +42,6 @@ jobs:
         run: node tests/paths-probe.cjs
       - name: Check class module navigation
         run: node tests/navigation-probe.cjs
+
+      - name: Check build diagnostic ownership
+        run: node tests/build-diagnostics-probe.cjs

@@ -15,7 +15,7 @@ const commandHelp=require('./command-help.cjs');
 const packageData=require('./package-data.cjs');
 const texCatalog=new Map();
 const logSync=new (require('./log-sync.cjs').LogSync)();
-const diagnosticFiles=new Map(),publishedDiagnostics=new Set();
+const diagnosticStore=new (require('./build-diagnostics.cjs').BuildDiagnostics)(),publishedDiagnostics=new Set();
 const docs=new Map(), jobs=new Map(), buildDiagnostics=new Map(), timers=new Map(), lastRecipes=new Map();
 const buildLogs=new Map(), buildStates=new Map();
 let clientCapabilities={}, progressSerial=0;
@@ -71,13 +71,10 @@ function run(command,args,options={}){
     if(options.input!==undefined)child.stdin.end(options.input);else child.stdin.end();
   });
 }
+function refreshBuildDiagnostics(){buildDiagnostics.clear();for(const [file,items] of diagnosticStore.merged())buildDiagnostics.set(file,items);refresh();}
 function updateBuildDiagnostics(root,log,cwd){
-  const rootKey=core.key(root),parsed=core.logDiagnostics(log,root,{cwd,files:[...core.dependencies(root,docs)],docs});
-  const previous=diagnosticFiles.get(rootKey)||new Set();
-  for(const filename of core.dependencies(root,docs))previous.add(core.key(filename));
-  for(const filename of previous)buildDiagnostics.delete(filename);
-  const next=new Set();for(const [url,diagnostics] of parsed){const filename=core.key(core.file(url));buildDiagnostics.set(filename,diagnostics);next.add(filename);}
-  diagnosticFiles.set(rootKey,next);refresh();
+  const parsed=core.logDiagnostics(log,root,{cwd,files:[...core.dependencies(root,docs)],docs});
+  diagnosticStore.replace(root,new Map([...parsed].map(([url,items])=>[core.file(url),items])));refreshBuildDiagnostics();
 }
 async function cleanFiles(root,job,step={}){
   const config=job.config||globalConfig();
@@ -139,7 +136,7 @@ async function build(active,recipeName,manual=true){
     const stem=config['latex.jobname'] || path.basename(root,path.extname(root));
     let log;try{if(status===2 || status===3)throw new Error('Build did not produce a log');log=fs.readFileSync(path.join(recipe.output,stem+'.log'),'utf8');}catch{log=combined;}
     updateBuildDiagnostics(root,log,recipe.cwd);lastRecipes.set(rootKey,recipe.name);
-    if(failure){const values=buildDiagnostics.get(rootKey)||[];if(![...(diagnosticFiles.get(rootKey)||[])].some(filename=>(buildDiagnostics.get(filename)||[]).some(item=>item.severity===1))){values.push({source:'latex-workshop',message:failure,severity:1,range:{start:{line:0,character:0},end:{line:0,character:1}}});buildDiagnostics.set(rootKey,values);const files=diagnosticFiles.get(rootKey)||new Set();files.add(rootKey);diagnosticFiles.set(rootKey,files);refresh();}}
+    if(failure&&!diagnosticStore.hasErrors(root)){diagnosticStore.add(root,root,{source:'latex-workshop',message:failure,severity:1,range:{start:{line:0,character:0},end:{line:0,character:1}}});refreshBuildDiagnostics();}
     const elapsedMs=Date.now()-job.startedAt,elapsed=(elapsedMs/1000).toFixed(1)+'s';
     const outcome=status===0?'Succeeded':status===3?'Cancelled':'Failed';
     const summary=outcome+' — '+recipe.name+' — '+elapsed;
@@ -332,7 +329,7 @@ async function handle(method,params){
   if(method==='initialize'){
     clientCapabilities=params.capabilities||{};folders=core.workspaceRoots(params);
     configure(params.initializationOptions || {});
-    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.17'}};
+    return {capabilities:{textDocumentSync:{openClose:true,change:1,save:{includeText:true}},completionProvider:{triggerCharacters:['\\','{',',','[','=']},definitionProvider:true,referencesProvider:true,renameProvider:{prepareProvider:true},hoverProvider:true,workspaceSymbolProvider:true,documentSymbolProvider:true,documentFormattingProvider:true,codeActionProvider:true,codeLensProvider:{resolveProvider:false},executeCommandProvider:{commands:['latex-workshop.build','latex-workshop.recipes','latex-workshop.clean','latex-workshop.kill','latex-workshop.showLog','latex-workshop.checkTools']},workspace:{workspaceFolders:{supported:true,changeNotifications:true}}},serverInfo:{name:'LaTeX Workshop for Zed',version:'0.4.18'}};
   }
   if(method==='initialized'){
     // Zed supplies workspace configuration after initialization; request it too.
