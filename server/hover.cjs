@@ -54,3 +54,37 @@ function fileCard(name,where,source,language='latex'){
  return parts.join('\n\n');
 }
 module.exports={fileCard,bibliography,context,escapeMarkdown,code,prose,declaration,card,content};
+function referenceContext(source,entry){
+ const core=require('./core.cjs'),at=core.offset(source,entry.range.start),clean=core.mask(source);
+ function group(start,open='{',close='}'){
+  while(/\s/.test(clean[start]||'')&&start<clean.length)start++;
+  if(clean[start]!==open)return null;let depth=1,braces=0;
+  for(let i=start+1;i<clean.length;i++){
+   if(clean[i]==='\\'){i++;continue;}
+   if(open==='['){if(clean[i]==='{')braces++;else if(clean[i]==='}')braces--;if(braces)continue;}
+   if(clean[i]===open)depth++;else if(clean[i]===close&&--depth===0)return {start,end:i+1};
+  }return null;
+ }
+ const labels=[...clean.matchAll(/\\label\s*\{/g)].map(m=>{const arg=group(m.index+m[0].length-1);return arg&&{start:m.index,end:arg.end};}).filter(Boolean);
+ const label=labels.find(item=>item.start<=at&&at<item.end);if(!label)return context(source,entry.range.start.line);
+ const candidates=[];
+ for(const match of clean.matchAll(/\\subfloat\b/g)){
+  let cursor=match.index+match[0].length;
+  for(let n=0;n<2;n++){const arg=group(cursor,'[',']');if(arg)cursor=arg.end;}
+  const body=group(cursor);if(body&&match.index<=at&&at<body.end)candidates.push({start:match.index,end:body.end});
+ }
+ function visit(nodes){for(const node of nodes){const start=core.offset(source,node.range.start),end=core.offset(source,node.range.end);if(['float','math'].includes(node.detail)&&start<=at&&at<end)candidates.push({start,end});visit(node.children||[]);}}
+ visit(core.symbols(source));
+ const span=candidates.filter(item=>labels.filter(other=>item.start<=other.start&&other.end<=item.end).length===1).sort((a,b)=>(a.end-a.start)-(b.end-b.start))[0];
+ let start=span?.start??Math.max(0,core.offset(source,{line:Math.max(0,entry.range.start.line-2),character:0})),end=span?.end??label.end;
+ const previous=labels.filter(item=>item.end<=label.start).at(-1);if(previous)start=Math.max(start,previous.end);
+ const labelLine=source.slice(start,at).split('\n').length-1,lines=source.slice(start,end).split(/\r?\n/),from=Math.max(0,labelLine-3),to=Math.min(lines.length,from+8);
+ let text=lines.slice(from,to).join('\n'),clipped=from>0||to<lines.length;
+ if(text.length>600){const relative=text.indexOf(source.slice(label.start,label.end));const begin=Math.max(0,relative-250);text=text.slice(begin,begin+600);clipped=true;}
+ return (from>0?'% …\n':'')+text.trim()+(clipped?'\n% …（源码预览已省略）':'');
+}
+function referenceCard(name,where,source){
+ return '**标签**\n\n'+code(name,'text')+'\n\n**定义位置**\n\n'+code(where,'text')+'\n\n**相关源码**\n\n'+code(source);
+}
+module.exports.referenceContext=referenceContext;
+module.exports.referenceCard=referenceCard;
