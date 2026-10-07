@@ -44,10 +44,12 @@ jobs:
         run: node tests/navigation-probe.cjs
         env:
           HOVER_MARKDOWN: '1'
+          COMPLETION_MARKDOWN: '1'
       - name: Check Markdown reference hover LSP
         run: node tests/workshop-probe.cjs
         env:
           HOVER_MARKDOWN: '1'
+          COMPLETION_MARKDOWN: '1'
           SKIP_TEX_BUILD: '1'
       - name: Check parameter signature help
         run: node tests/signature-help-probe.cjs

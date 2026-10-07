@@ -19,9 +19,10 @@ function describe(idx,docs,commandInfo){
     let models=files.get(entry.file);if(!models){models=core.analyzeSource(entry.file,docs,'wrapper-definitions',require('./wrappers.cjs').definitions);files.set(entry.file,models);}
     const model=models.find(item=>item.name===name&&item.start===core.offset(core.read(entry.file,docs),entry.range.start));args=model?.args;
    }
-   documentation=environment?require('./environments.cjs').info(name,entry).documentation+require('./definition-candidates.cjs').notice(idx.environmentDefinitions,name,entry):commandInfo(name,idx)?.documentation;
+   const info=environment?require('./environments.cjs').info(name,entry):commandInfo(name,idx),notice=require('./definition-candidates.cjs').notice(environment?idx.environmentDefinitions:idx.commandDefinitions,name,entry).trim().split('\n')[0];
+   documentation=[environment?info.documentation.slice(info.signature.length).trim():info?.description,!environment?'定义：'+entry.file+':'+(entry.range.start.line+1):undefined,notice?notice+'；其他位置可通过定义跳转查看。':undefined].filter(Boolean).join('\n');
   }else if(!environment){
-   const info=commandInfo(name,idx),parsed=info&&fromLabel(info.signature);args=parsed?.args;constantStar=parsed?.constantStar;documentation=info?.documentation;
+   const info=commandInfo(name,idx),parsed=info&&fromLabel(info.signature);args=parsed?.args;constantStar=parsed?.constantStar;documentation=info?.description;
   }
   const result=args?.length?{args,documentation,head:environment?'\\begin{'+name+'}':'\\'+name,constantStar}:null;memo.set(key,result);return result;
  };
