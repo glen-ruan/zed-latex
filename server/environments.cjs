@@ -54,7 +54,7 @@ function info(name,entry){
  if(entry.wrapper)details.push('生成命令：\\'+entry.wrapper);
  const where=entry.file+':'+(entry.range.start.line+1);
  details.push((entry.wrapper?'注册：':'定义：')+where);
- return {signature,documentation:[signature,...details].join('\n')};
+ return {signature,description:details.slice(0,-1).join('\n'),documentation:[signature,...details].join('\n')};
 }
 
 function argumentsSnippet(entry){

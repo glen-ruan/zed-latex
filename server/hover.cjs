@@ -73,8 +73,9 @@ function referenceContext(source,entry){
   for(let n=0;n<2;n++){const arg=group(cursor,'[',']');if(arg)cursor=arg.end;}
   const body=group(cursor);if(body&&match.index<=at&&at<body.end)candidates.push({start:match.index,end:body.end});
  }
- function visit(nodes){for(const node of nodes){const start=core.offset(source,node.range.start),end=core.offset(source,node.range.end);if(['float','math'].includes(node.detail)&&start<=at&&at<end)candidates.push({start,end});visit(node.children||[]);}}
- visit(core.symbols(source));
+ function structures(text){const spans=[];function visit(nodes){for(const node of nodes){if(['float','math'].includes(node.detail))spans.push({start:core.offset(text,node.range.start),end:core.offset(text,node.range.end)});visit(node.children||[]);}}visit(core.symbols(text));return spans;}
+ const spans=entry.file?core.analyzeSource(entry.file,new Map([[core.key(entry.file),{text:source}]]),'reference-preview-spans',structures):structures(source);
+ candidates.push(...spans.filter(item=>item.start<=at&&at<item.end));
  const span=candidates.filter(item=>labels.filter(other=>item.start<=other.start&&other.end<=item.end).length===1).sort((a,b)=>(a.end-a.start)-(b.end-b.start))[0];
  let start=span?.start??Math.max(0,core.offset(source,{line:Math.max(0,entry.range.start.line-2),character:0})),end=span?.end??label.end;
  const previous=labels.filter(item=>item.end<=label.start).at(-1);if(previous)start=Math.max(start,previous.end);

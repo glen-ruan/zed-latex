@@ -37,10 +37,12 @@ const HELP={
  printbibliography:['\\printbibliography[选项]','biblatex：打印参考文献列表。'],
 };
 function at(source,pos){const offset=core.offset(source,pos);for(const match of core.mask(source).matchAll(/\\([A-Za-z@_:]+)\*?/g))if(offset>=match.index&&offset<match.index+match[0].length)return {name:match[1],range:core.range(source,match.index,match.index+match[0].length)};return null;}
-function custom(name,source,entry){
+function model(name,source,entry){
  const start=core.offset(source,entry.range.start),end=core.offset(source,entry.range.end),prefix=source.slice(start,end);
  if(!/^\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\b/.test(prefix))return null;
  const docs=new Map([[core.key(entry.file),{text:source}]]),models=core.analyzeSource(entry.file,docs,'wrapper-definitions',require('./wrappers.cjs').definitions),model=models.find(item=>item.name===name&&item.start===start);if(!model)return null;
- let signature='\\'+name;for(let i=0;i<model.args.length;i++)signature+=(model.args[i].optional?'[参数'+(i+1)+']':'{参数'+(i+1)+'}');return signature;
+ return model;
 }
-module.exports={HELP,at,custom};
+function custom(name,source,entry){const info=model(name,source,entry);if(!info)return null;let signature='\\'+name;for(let i=0;i<info.args.length;i++)signature+=(info.args[i].optional?'[参数'+(i+1)+']':'{参数'+(i+1)+'}');return signature;}
+function customSnippet(name,source,entry){const info=model(name,source,entry);if(!info)return null;const escape=value=>String(value).replace(/[\\$}]/g,'\\$&');let snippet=name;for(let i=0;i<info.args.length;i++){const arg=info.args[i],value=arg.optional&&arg.defaultValue!==undefined?arg.defaultValue:'参数'+(i+1);snippet+=(arg.optional?'[':'{')+'${'+(i+1)+':'+escape(value)+'}'+(arg.optional?']':'}');}return snippet;}
+module.exports={HELP,at,custom,customSnippet};
